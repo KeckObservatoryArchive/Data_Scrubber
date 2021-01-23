@@ -1,7 +1,9 @@
+import os
 import configparser
 import logging
 import json
 import subprocess
+from datetime import datetime
 import scrubber_utils as utils
 
 
@@ -10,31 +12,113 @@ class ToDelete:
         self.utd = args.utd
         self.utd2 = args.utd2
         self.log = logging.getLogger(log_name)
-        database_obj = ChkArchive()
-        self.to_delete = database_obj.get_files_to_delete()
+        self.database_obj = ChkArchive()
+        self.to_delete = self.database_obj.get_files_to_delete()
+
+    def num_all_files(self):
+        """
+        Provide access to the total number of files without the restriction
+        on status.
+
+        :return: <int> number of files in the data range
+        """
+        return self.database_obj.num_all_files(self.utd, self.utd2)
 
     # TODO this only logs the info,  it does not remove any files
     def delete_files(self):
         """
         This will find and delete the files for the specified date range.
+
+        :return: <int> number deleted, number found matching deletion criteria.
         """
         if not self.to_delete:
-            return
+            return 0, 0
 
+        n_deleted = 0
         for result in self.to_delete:
             full_filename = result['ofname']
-            log_str = f"os.remove {full_filename}"
-            self.log.info(log_str)
+            try:
+                self.log.info(f"os.remove {full_filename}")
+            except OSError as error:
+                self.log.warning(f"Error while removing: {full_filename}, "
+                                 f"{error}")
+                continue
+
             self.mark_deleted(result['koaid'])
+            n_deleted += 1
+
+        return n_deleted, len(self.to_delete)
+
+    # TODO this only copies,  does not move files.
+    def move_files(self):
+        """
+        Move the DEP files to storage.
+
+        :return: <int> number moved, number found matching move criteria.
+        """
+        if not self.to_delete:
+            return 0, 0
+
+        num_moved = 0
+        storage_created = []
+        for result in self.to_delete:
+            koaid = result['koaid']
+            file_path = result['archive_dir']
+
+            storage_dir = args.storagedir
+            if not storage_dir:
+                storage_dir = self.determine_storage(koaid)
+
+            if not storage_dir:
+                self.log.warning("Could not determine storage path!")
+                self.log.warning(f"File at: {file_path} where not moved!")
+                continue
+
+            if storage_dir not in storage_created:
+                if self.make_storage_dir(storage_dir) == 0:
+                    log.warning(f"Error creating storage dir: {storage_dir}")
+                    continue
+
+                storage_created.append(storage_dir)
+
+            num_moved += self._rsync_files(koaid, file_path, storage_dir)
+
+        return num_moved, len(self.to_delete)
+
+    def make_storage_dir(self, storage_dir):
+        """
+        Create the storage directory.  If it does not exists,  go up
+        creating directories in the path.
+
+        :param storage_dir: <str>
+            ie: /koadata/test_storage/koastorage02/KCWI/koadata28/20210116/lev0/
+        :return: <int> status,  1 on success 0 on failure
+        """
+        try:
+            os.mkdir(storage_dir)
+            self.log.info(f"created directory: {storage_dir}")
+        except FileExistsError:
+            return 1
+        except FileNotFoundError:
+            self.log.info(f"Directory: {storage_dir}, does not exist yet.")
+            one_down = '/'.join(storage_dir.split('/')[:-1])
+            if len(one_down) > len(storage_root):
+                self.make_storage_dir(one_down)
+            else:
+                return 0
+        except:
+            return 0
+
+        # rewind
+        return_val = self.make_storage_dir(storage_dir)
+
+        return return_val
 
     # TODO only logs the command not update being performed
-    # TODO API will need to be updated with permission koa -> koaadmin and
-    # TODO update call to be updateGENERAL not updateMARKDELETED
     def mark_deleted(self, koaid):
         """
-        Add deleted to the dep_status table for the given koaid.
-
-        update dep_status set ofname_deleted = True where koaid='HI.20201104.9999.91';
+        Add deleted to the dep_status (ofname_deleted) table for the
+        given koaid.
 
         :param koaid: <str> koaid of file to mark as deleted
         :return:
@@ -52,94 +136,53 @@ class ToDelete:
         else:
             self.log.warning(f"OFNAME_DELETED not set for: {koaid}")
 
-    # TODO this only logs,  does not move files.
-    def move_files(self):
-        """
-        Move the DEP files to storage.
-        """
-        if not self.to_delete:
-            return
-
-        synced_paths = []
-        for result in self.to_delete:
-            files_path = result['archive_dir']
-
-            storage_dir = args.storagedir
-            if not storage_dir:
-                storage_dir = self.determine_storage(files_path)
-
-            if not storage_dir:
-                self.log.warning("Could not determine storage path!")
-                self.log.warning(f"Files in {files_path} where not moved!")
-                continue
-
-            files_path = files_path
-            files_path = files_path.split('/lev0')[0]
-
-            if files_path + storage_dir not in synced_paths:
-                self._rsync_files(files_path, storage_dir)
-                synced_paths.append(files_path + storage_dir)
-
-    def _rsync_files(self, files_path, storage_dir):
+    def _rsync_files(self, koaid, file_path, storage_dir):
         """
         rsync all the DEP files to bring them to storage.
 
         :param koaid: <str> the koaid used to find the files.
-        :param files_path: <str> the archive path or the DEP files.
+        :param file_path: <str> the archive path or the DEP files.
         :param storage_dir: <str> the path to store the files.
         """
-        # "rsync --remove-source-files -av -e ssh koaadmin@"$server":"$dir" "$storageDir[$i]"
-        server_str = f"{files_path}"
-
-        if args.dev:
-            rsync_cmd = ['rsync', '-av', '-e', 'ssh', server_str, storage_dir]
-        else:
+        if not args.dev:
             log.warning("Not ready to start moving files: use --dev")
-            return
             # TODO
-            # rsync_cmd = ['rsync', '--remove-source-files', '-av', '-e',
-            #              'ssh', server_str, storage_dir]
+            # "rsync --remove-source-files -av -e ssh koaadmin@"$server":"$dir"
+            #               "$storageDir[$i]"
 
-        print(rsync_cmd)
-        print("rsync-ing into TMP/,  this takes awhile.")
-        exit_val = subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL)
-        log_str = f"rsync({files_path}, {storage_dir})"
-        self.log.info(log_str)
+        server_str = f"{file_path}/"
+        rsync_cmd = ["rsync", "-av", "--include", koaid + "*",
+                     "--exclude", "*", server_str, storage_dir]
 
-    # TODO needs the storage path in archive_dir/koaid.txt
-    @staticmethod
-    def determine_storage_dir(koaid, archive_dir):
+        try:
+            subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
+        except subprocess.CalledProcessError:
+            log.warning(f"File with KOAID: {koaid} not moved to storage")
+            return 0
+
+        self.log.info(f"rsync cmd: {rsync_cmd}")
+
+        return 1
+
+    def determine_storage(self, koaid):
         """
-
-        :param koaid:
-        :param archive_dir:
-        :return:
-        """
-        storage_path = None
-        full_path = "/".join(archive_dir, koaid)
-        f_handle = open(full_path, "r")
-        for line in f_handle:
-            if 'storage' in line:
-                storage_path = line
-
-        return storage_path
-
-    def determine_storage(self, files_path):
-        """
+        Find the storage directory from the KOAID.
         # koadmin@storageserver:/koastorage04/DEIMOS/koadata39/
 
-        :param files_path:
-        :return:
+        :param koaid: <str> <inst>.utd.#####.## (ie: KB.20210116.57436.94)
+        :return: <str> full path to storage directory (including lev0)
         """
-        path_parts = files_path.split('/')
-        inst_idx = path_parts.index('koadata') + 1
-        if len(path_parts) <= inst_idx:
-            return None
-        inst = path_parts[inst_idx]
-        if not self._chk_inst(inst):
+        id_parts = koaid.split('.')
+        if len(id_parts) != 4:
             return None
 
-        return utils.get_config_param(config, 'storage', inst)
+        inst = utils.get_config_param(config, 'inst_prefix', id_parts[0])
+        utd = id_parts[1]
+
+        storage_inst = utils.get_config_param(config, 'storage', inst)
+        storage_path = f"{storage_root}{storage_inst}/{utd}/lev0/"
+
+        return storage_path
 
     def _chk_inst(self, inst):
         if exclude_insts and inst in exclude_insts:
@@ -150,11 +193,11 @@ class ToDelete:
 
         return True
 
+
 class ChkArchive:
     def __init__(self):
         self.log = logging.getLogger(log_name)
         self.archived_key = utils.get_config_param(config, 'archive', 'archived')
-
         self.archived_files = self.files_to_delete(args.utd, args.utd2)
 
     def get_files_to_delete(self):
@@ -165,6 +208,27 @@ class ChkArchive:
         """
         return self.archived_files
 
+    def num_all_files(self, utd, utd2):
+        """
+        Make a query to find the number of results without restricting by
+        status.
+
+        :param utd: <str> UT date at start of range.
+        :param utd2: <str> UT date at end of range.
+        :return: <int> the number of files in the archive between the two dates.
+        """
+        columns = 'koaid'
+        key = 'OFNAME_DELETED'
+        val = '0'
+        try:
+            results = utils.query_rti_api(site, 'search', 'GENERAL',
+                                          columns=columns, key=key, val=val,
+                                          utd=utd, utd2=utd2)
+            archived_results = json.loads(results)
+            return len(archived_results['data'])
+        except:
+            return 0
+
     #TODO change config file ARCHIVED / COMPLETED
     def files_to_delete(self, utd, utd2):
         """
@@ -174,7 +238,7 @@ class ChkArchive:
         :param utd: <str> YYYY-MM-DD initial date
         :param utd2: <str> YYYY-MM-DD the final date,  if None,  only one day
                            is searched.
-        :return: (dict) the verified data results from the query
+        :return: <dict> the verified data results from the query
         """
         columns = 'koaid,status,ofname,stage_file,archive_dir,ofname_deleted'
         key = 'status'
@@ -186,12 +250,13 @@ class ChkArchive:
                                           add=add, utd=utd, utd2=utd2)
             archived_results = json.loads(results)
         except:
-            self.log.warning("NO RESULTS,  OR ERROR LOADING RESULTS AS JSON")
-            archived_results = None
+            self.log.info("NO RESULTS")
+            return None
 
-        if self.get_key_val(archived_results, 'success') == 1:
-            data = self.get_key_val(archived_results, 'data')
+        if utils.get_key_val(archived_results, 'success') == 1:
+            data = utils.get_key_val(archived_results, 'data')
             data = self.verify_db_results(data)
+
             return self.chk_stage_exists(data)
 
         return None
@@ -222,26 +287,24 @@ class ChkArchive:
         :param result: <dict> a single row from the db query
         :return: <bool, str> True if valid,  err_msg when invalid.
         """
-        koaid = self.get_key_val(result, 'koaid')
-        status = self.get_key_val(result, 'status')
-        ofname = self.get_key_val(result, 'ofname')
-        stage_file = self.get_key_val(result, 'stage_file')
-        archive_dir = self.get_key_val(result, 'archive_dir')
-        deleted = self.get_key_val(result, 'ofname_deleted')
+        koaid = utils.get_key_val(result, 'koaid')
+        status = utils.get_key_val(result, 'status')
+        ofname = utils.get_key_val(result, 'ofname')
+        stage_file = utils.get_key_val(result, 'stage_file')
+        archive_dir = utils.get_key_val(result, 'archive_dir')
+        deleted = utils.get_key_val(result, 'ofname_deleted')
 
         if (not koaid or not status or not ofname or not archive_dir
                 or not stage_file):
             return False, "INCOMPLETE RESULTS"
-        elif deleted:
-            return False, "FILE ALREADY MARKED AS DELETED"
-        elif len(koaid) != 20:
-            return False, "INVALID KOAID"
         elif status != self.archived_key:
             return False, "INVALID STATUS"
-        elif ofname.split('.')[-1] != 'fits':
-            return False, "INVALID OFNAME"
-        elif ofname.split('/')[-1] != stage_file.split('/')[-1]:
-            return False, "INVALID EQUALITY BETWEEN OFNAME AND STAGE_FILE"
+
+        #TODO what about moving without deleting?
+        elif deleted:
+            return False, "FILE ALREADY MARKED AS DELETED"
+        # elif ofname.split('/')[-1] != stage_file.split('/')[-1]:
+        #     return False, "INVALID EQUALITY BETWEEN OFNAME AND STAGE_FILE"
         elif archive_dir.split('/')[-1] != 'lev0':
             return False, "INVALID ARCHIVE DIR"
 
@@ -258,7 +321,7 @@ class ChkArchive:
             return None
 
         for idx, result in enumerate(data):
-            file_location = self.get_key_val(result, 'stage_file')
+            file_location = utils.get_key_val(result, 'stage_file')
             if not utils.chk_file(file_location):
                 self.log.warning(f"REMOVING FROM DELETE LIST, ")
                 self.log.warning(f"STAGE FILE NOT FOUND: {result}")
@@ -266,48 +329,53 @@ class ChkArchive:
 
         return data
 
-    @staticmethod
-    def get_key_val(result_dict, key_name):
-        """
-        Use to avoid an error while accessing a key that does not exist.
-
-        :param result_dict: (dict) dictionary to check
-        :param key_name: (str) key name
-
-        :return: dictionary value
-        """
-        if result_dict and key_name in result_dict:
-            return result_dict[key_name]
-
-        return None
-
 
 if __name__ == '__main__':
     config_filename = 'scrubber_config.ini'
     config = configparser.ConfigParser()
     config.read(config_filename)
 
-    site = utils.get_config_param(config, 'DEV', 'site')
-
     args = utils.parse_args()
     exclude_insts, include_insts = utils.define_args(args)
 
-    log_name, log_stream = utils.create_logger('data_scrubber', args.logdir)
+    if args.dev:
+        config_type = "DEV"
+    else:
+        config_type = "DEFAULT"
+
+    site = utils.get_config_param(config, config_type, 'site')
+    storage_root = utils.get_config_param(config, config_type, 'storage_root')
+
+    log_dir = utils.get_config_param(config, config_type, 'log_dir')
+    log_name, log_stream = utils.create_logger('data_scrubber', log_dir)
     log = logging.getLogger(log_name)
 
-    log.info(f"Running Checks for utd: {args.utd} to {args.utd2}")
+    log.info(f"Scrubbing data in UT range: {args.utd} to {args.utd2}")
+    log.info(f"REMOVE ORIGINAL (OFNAME) FILES: {args.remove}")
+    log.info(f"MOVE KOA PROCESSED FILES to storage: {args.move}")
 
+    metrics = {}
     delete_obj = ToDelete()
     if args.move:
-        delete_obj.move_files()
+        metrics['n_moved'], metrics['n_results'] = delete_obj.move_files()
     if args.remove:
-        delete_obj.delete_files()
+        metrics['n_deleted'], metrics['n_results'] = delete_obj.delete_files()
 
+    metrics['total_files'] = delete_obj.num_all_files()
+
+    # send a report of the scrub
+    now = datetime.now().strftime('%Y-%m-%d')
+    report = utils.create_report(metrics)
+    mailto = utils.get_config_param(config, 'email', 'admin')
+    utils.send_email(report, mailto, f'RTI Scrubber Report: {now}')
+
+    # if log_stream:
     log_contents = log_stream.getvalue()
     log_stream.close()
 
     if log_contents:
-        utils.send_email(log_contents, config)
+        mailto = utils.get_config_param(config, 'email', 'warnings')
+        utils.send_email(log_contents, mailto, f'RTI Scrubber Warnings: {now}')
 
 
 

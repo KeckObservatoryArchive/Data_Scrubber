@@ -27,7 +27,7 @@ def chk_file(file_location, filename=None):
     return os.path.exists(file_location)
 
 
-def send_email(email_msg, config):
+def send_email(email_msg, mailto, subject):
     """
     send an email if there are any warnings or errors logged.
 
@@ -35,9 +35,7 @@ def send_email(email_msg, config):
     :param config: <class 'configparser.ConfigParser'> the config file parser.
     """
     import smtplib
-    mailto = get_config_param(config, 'email', 'warnings')
     mailfrom = 'data_scrubber@keck.hawaii.edu'
-    subject = 'Warnings from the scrubber'
 
     msg = f"From: {mailfrom}\r\nTo: {mailto}\r\n"
     msg += f"Subject: {subject}\r\n\r\n{email_msg}"
@@ -78,6 +76,25 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
     results = response.content
 
     return results
+
+
+def create_report(metrics):
+    """
+    Form the report to be emailed at the end of a scrub run.
+
+    :param metrics: <dict> the values of files,  moved, removed, total.
+    :return: <str> the report.
+    """
+
+    report = f"\nNumber of files archived: {metrics['n_results']}"
+    if 'n_deleted' in metrics:
+        report += f"\nNumber of files deleted: {metrics['n_deleted']}"
+    if 'n_moved' in metrics:
+        report += f"\nNumber of KOAIDs moved: {metrics['n_moved']}"
+    report = f"Total number of files not previously deleted (any status): "
+    report += f"{metrics['total_files']}"
+
+    return report
 
 
 def create_logger(name, logdir):
@@ -142,15 +159,15 @@ def parse_args():
     parser.add_argument("--remove", action="store_true",
                         help="delete the files from the instrument servers")
     parser.add_argument("--storagedir", type=str,
-                        default="/usr/local/home/koarti/lfuhrman/Scrubber/TMP/",
-                        help="Only log the commands,  do not execute")
+                        help="Change the path of the storage server from the"
+                             " one in the configuration file.")
     parser.add_argument("--logdir", type=str, default='log',
                         help="Define the directory for the log.")
     parser.add_argument("--utd", type=str,
-                        default=(now - timedelta(days=20)).strftime('%Y-%m-%d'),
+                        default=(now - timedelta(days=14)).strftime('%Y-%m-%d'),
                         help="Start date to process YYYY-MM-DD.")
     parser.add_argument("--utd2", type=str,
-                        default=(now - timedelta(days=14)).strftime('%Y-%m-%d'),
+                        default=(now - timedelta(days=21)).strftime('%Y-%m-%d'),
                         help="End date to process YYYY-MM-DD.")
     parser.add_argument("--include_inst", type=str,
                         default=None,
@@ -202,3 +219,18 @@ def get_config_param(config, section, param_name):
         sys.exit(err_msg)
 
     return param_val
+
+
+def get_key_val(result_dict, key_name):
+    """
+    Use to avoid an error while accessing a key that does not exist.
+
+    :param result_dict: (dict) dictionary to check
+    :param key_name: (str) key name
+
+    :return: dictionary value
+    """
+    if result_dict and key_name in result_dict:
+        return result_dict[key_name]
+
+    return None
