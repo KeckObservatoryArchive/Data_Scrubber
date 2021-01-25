@@ -5,6 +5,10 @@ import json
 import subprocess
 from datetime import datetime
 import scrubber_utils as utils
+from os import path
+
+APP_PATH = path.abspath(path.dirname(__file__))
+CONFIG_FILE = f'{APP_PATH}/scrubber_config.ini'
 
 
 class ToDelete:
@@ -331,9 +335,8 @@ class ChkArchive:
 
 
 if __name__ == '__main__':
-    config_filename = 'scrubber_config.ini'
     config = configparser.ConfigParser()
-    config.read(config_filename)
+    config.read(CONFIG_FILE)
 
     args = utils.parse_args()
     exclude_insts, include_insts = utils.define_args(args)

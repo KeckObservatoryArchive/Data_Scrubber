@@ -90,7 +90,7 @@ def create_report(metrics):
     if 'n_deleted' in metrics:
         report += f"\nNumber of files deleted: {metrics['n_deleted']}"
     if 'n_moved' in metrics:
-        report += f"\nNumber of KOAIDs moved: {metrics['n_moved']}"
+        report += f"\nNumber of KOAIDs moved: {metrics['n_moved']}\n"
     report += f"Total number of files not previously deleted (any status): "
     report += f"{metrics['total_files']}"
 
