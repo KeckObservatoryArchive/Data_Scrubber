@@ -1,13 +1,13 @@
 import os
+import sys
 import configparser
 import logging
 import json
 import subprocess
 from datetime import datetime
 import scrubber_utils as utils
-from os import path
 
-APP_PATH = path.abspath(path.dirname(__file__))
+APP_PATH = os.path.abspath(os.path.dirname(__file__))
 CONFIG_FILE = f'{APP_PATH}/scrubber_config.ini'
 
 

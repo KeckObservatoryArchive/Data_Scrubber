@@ -4,6 +4,9 @@ import logging
 import os
 import sys
 
+import subprocess
+from collections import namedtuple
+
 from io import StringIO
 from datetime import datetime, timedelta
 
@@ -156,6 +159,9 @@ def parse_args():
     parser.add_argument("--move", action="store_true",
                         help="move the processed DEP files from the lev0 to "
                              "the storage servers.")
+    parser.add_argument("--movekoa", action="store_true",
+                        help="move the processed DEP files for non-RTI to"
+                             "the storage servers.")
     parser.add_argument("--remove", action="store_true",
                         help="delete the files from the instrument servers")
     parser.add_argument("--storagedir", type=str,
@@ -234,3 +240,24 @@ def get_key_val(result_dict, key_name):
         return result_dict[key_name]
 
     return None
+
+
+def remote_df(user, ip, path):
+    """
+    Executes df on remote host and return
+    (total, free, used) as int in bytes
+    """
+    Result = namedtuple('diskfree', 'total used free')
+    output = subprocess.check_output(['ssh', f'{user}@{ip}', '-C', 'df', path],
+                                     shell=False)
+    output = output.splitlines()
+    for line in output[1:]:
+        result = line.decode().split()
+
+        if result[-1] == path and len(result) > 3:
+            used = result[2]
+            free = result[3]
+            total = used + free
+            return Result(total, used, free)
+        else:
+            raise Exception('Path "%s" not found' % path)
