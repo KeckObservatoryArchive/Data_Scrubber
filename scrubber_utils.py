@@ -159,9 +159,6 @@ def parse_args():
     parser.add_argument("--move", action="store_true",
                         help="move the processed DEP files from the lev0 to "
                              "the storage servers.")
-    parser.add_argument("--movekoa", action="store_true",
-                        help="move the processed DEP files for non-RTI to"
-                             "the storage servers.")
     parser.add_argument("--remove", action="store_true",
                         help="delete the files from the instrument servers")
     parser.add_argument("--storagedir", type=str,
