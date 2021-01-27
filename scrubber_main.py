@@ -183,8 +183,11 @@ class ToDelete:
         inst = utils.get_config_param(config, 'inst_prefix', id_parts[0])
         utd = id_parts[1]
 
-        storage_inst = utils.get_config_param(config, 'storage', inst)
-        storage_path = f"{storage_root}{storage_inst}/{utd}/lev0/"
+        store_num = utils.get_config_param(config, 'storage_disk', inst)
+        koa_num = utils.get_config_param(config, 'koa_disk', inst)
+        koa_root = utils.get_config_param(config, 'koa_disk', 'path_root')
+        storage_path = f"{storage_root}{store_num}/{inst}/"
+        storage_path += f"{koa_root}{koa_num}/{utd}/lev0/"
 
         return storage_path
 
