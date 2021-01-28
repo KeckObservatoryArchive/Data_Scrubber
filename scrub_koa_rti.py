@@ -1,5 +1,4 @@
 import os
-import sys
 import configparser
 import logging
 import json
@@ -18,6 +17,7 @@ class ToDelete:
         self.log = logging.getLogger(log_name)
         self.database_obj = ChkArchive()
         self.to_delete = self.database_obj.get_files_to_delete()
+        self.to_move = self.database_obj.get_files_to_move()
 
     def num_all_files(self):
         """
@@ -53,41 +53,81 @@ class ToDelete:
 
         return n_deleted, len(self.to_delete)
 
+    def store_stage_files(self):
+        """
+        move the original file copy (stage_file) to storage.
+
+        :return: <int> number moved, number found matching move criteria.
+        """
+        if not self.to_move:
+            return 0, 0
+
+        num_moved = 0
+        dirs_made = []
+        for result in self.to_delete:
+            koaid = result['koaid']
+            mv_path = result['stage_file']
+            ofname = result['ofname']
+
+            storage_dir, dirs_made = self.get_storage_dir(koaid, mv_path,
+                                                          dirs_made, ofname)
+            if not storage_dir:
+                continue
+
+            num_moved += self._rsync_files(mv_path, storage_dir)
+
+        return num_moved, len(self.to_delete)
+
     # TODO this only copies,  does not move files.
-    def move_files(self):
+    def store_lev0_files(self):
         """
         Move the DEP files to storage.
 
         :return: <int> number moved, number found matching move criteria.
         """
-        if not self.to_delete:
+        if not self.to_move:
             return 0, 0
 
         num_moved = 0
-        storage_created = []
+        dirs_made = []
         for result in self.to_delete:
             koaid = result['koaid']
-            file_path = result['archive_dir']
+            mv_path = result['process_dir']
 
-            storage_dir = args.storagedir
+            storage_dir, dirs_made = self.get_storage_dir(koaid, mv_path,
+                                                          dirs_made)
             if not storage_dir:
-                storage_dir = self.determine_storage(koaid)
-
-            if not storage_dir:
-                self.log.warning("Could not determine storage path!")
-                self.log.warning(f"File at: {file_path} where not moved!")
                 continue
 
-            if storage_dir not in storage_created:
-                if self.make_storage_dir(storage_dir) == 0:
-                    log.warning(f"Error creating storage dir: {storage_dir}")
-                    continue
-
-                storage_created.append(storage_dir)
-
-            num_moved += self._rsync_files(koaid, file_path, storage_dir)
+            num_moved += self._rsync_files(mv_path, storage_dir, koaid)
 
         return num_moved, len(self.to_delete)
+
+    def get_storage_dir(self, koaid, mv_path, dirs_made, ofname=None):
+        """
+        get storage location and make the directory if needed.
+
+        :param koaid: <str> the koaid of files.
+        :param mv_path: <str> the path to the files(s) to move
+        :param dirs_made: <list> the directories already created
+        :param ofname: <str> ofname (dep_status table)
+        :return: <str/list> storage directory (or None) and list of storage dirs
+        """
+        storage_dir = self.determine_storage(koaid, ofname)
+
+        if not storage_dir:
+            self.log.warning("Could not determine storage path!")
+            self.log.warning(f"Files at: {mv_path} where not moved!")
+            return None, dirs_made
+
+        if storage_dir not in dirs_made:
+            if self.make_storage_dir(storage_dir) == 0:
+                log.warning(f"Error creating storage dir: {storage_dir}")
+                return None, dirs_made
+
+            dirs_made.append(storage_dir)
+
+        return storage_dir, dirs_made
 
     def make_storage_dir(self, storage_dir):
         """
@@ -118,34 +158,55 @@ class ToDelete:
 
         return return_val
 
-    # TODO only logs the command not update being performed
+    # TODO only logs the command not update being performed (change on API)
     def mark_deleted(self, koaid):
         """
         Add deleted to the dep_status (ofname_deleted) table for the
         given koaid.
 
         :param koaid: <str> koaid of file to mark as deleted
-        :return:
         """
-
         results = utils.query_rti_api(site, 'update', 'MARKDELETED', val=koaid)
+        self._log_update(koaid, results, 'OFNAME_DELETED')
+
+    # TODO only logs the command - update not being performed (change on API)
+    def add_archived_dir(self, koaid, archive_path):
+        """
+        Add the path to the storage / archived files.
+
+        :param koaid: <str> the koaid
+        :param archive_path: <str> storage path where files were moved/archived.
+        """
+        results = utils.query_rti_api(site, 'update', 'GENERAL',
+                                      columns='archive_dir',
+                                      update_val=archive_path, val=koaid)
+        self._log_update(koaid, results, 'ARCHIVE_DIR')
+
+    def _log_update(self, koaid, results, column):
+        """
+        Log the update
+
+        :param koaid: <str> koaid of files to update
+        :param results: <str> the database results in json format
+        :param column: <str> the column name for logging
+        """
         try:
             results = json.loads(results)
         except:
-            self.log.warning(f"Could not mark deleted for: {koaid}")
+            self.log.warning(f"Could not set {column} for: {koaid}")
 
         if results and type(results) == dict and results['success'] == 1:
             self.log.info(f"{results['data']}")
-            self.log.info(f"OFNAME_DELETE flag set for koaid: {koaid}")
+            self.log.info(f"{column} set for koaid: {koaid}")
         else:
-            self.log.warning(f"OFNAME_DELETED not set for: {koaid}")
+            self.log.warning(f"{column} not set for: {koaid}")
 
-    def _rsync_files(self, koaid, file_path, storage_dir):
+    def _rsync_files(self, mv_path, storage_dir, koaid=None):
         """
         rsync all the DEP files to bring them to storage.
 
         :param koaid: <str> the koaid used to find the files.
-        :param file_path: <str> the archive path or the DEP files.
+        :param mv_path: <str> the archive path or the DEP files.
         :param storage_dir: <str> the path to store the files.
         """
         if not args.dev:
@@ -154,21 +215,24 @@ class ToDelete:
             # "rsync --remove-source-files -av -e ssh koaadmin@"$server":"$dir"
             #               "$storageDir[$i]"
 
-        server_str = f"{file_path}/"
-        rsync_cmd = ["rsync", "-av", "--include", koaid + "*",
-                     "--exclude", "*", server_str, storage_dir]
+        server_str = f"{mv_path}"
+        if koaid:
+            rsync_cmd = ["rsync", "-av", "--include", koaid + "*",
+                         "--exclude", "*", server_str, storage_dir]
+        else:
+            rsync_cmd = ["rsync", "-av", server_str, storage_dir]
+
+        self.log.info(f"rsync cmd: {rsync_cmd}")
 
         try:
             subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
         except subprocess.CalledProcessError:
-            log.warning(f"File with KOAID: {koaid} not moved to storage")
+            log.warning(f"File(s) {mv_path} not moved to storage")
             return 0
-
-        self.log.info(f"rsync cmd: {rsync_cmd}")
 
         return 1
 
-    def determine_storage(self, koaid):
+    def determine_storage(self, koaid, ofname=None):
         """
         Find the storage directory from the KOAID.
         # koadmin@storageserver:/koastorage04/DEIMOS/koadata39/
@@ -186,8 +250,19 @@ class ToDelete:
         store_num = utils.get_config_param(config, 'storage_disk', inst)
         koa_num = utils.get_config_param(config, 'koa_disk', inst)
         koa_root = utils.get_config_param(config, 'koa_disk', 'path_root')
+
         storage_path = f"{storage_root}{store_num}/{inst}/"
-        storage_path += f"{koa_root}{koa_num}/{utd}/lev0/"
+        # storing stage files
+        if ofname:
+            dirs = ofname.split('/')
+            if 'fits' not in dirs[-1]:
+                return None
+            s_root = '/'.join(dirs[:-1])
+            storage_path += f"stage/{inst}/{utd}/{s_root}"
+
+        # storing lev0 files
+        else:
+            storage_path += f"{koa_root}{koa_num}/{utd}/lev0/"
 
         return storage_path
 
@@ -205,7 +280,12 @@ class ChkArchive:
     def __init__(self):
         self.log = logging.getLogger(log_name)
         self.archived_key = utils.get_config_param(config, 'archive', 'archived')
-        self.archived_files = self.files_to_delete(args.utd, args.utd2)
+
+        add_query = 'AND OFNAME_DELETED=0'
+        self.to_delete = self.file_list(args.utd, args.utd2, add_query)
+
+        add_query = "AND ARCHIVE_DIR IS NULL OR ARCHIVE_DIR = ''"
+        self.to_move = self.file_list(args.utd, args.utd2, add_query)
 
     def get_files_to_delete(self):
         """
@@ -213,7 +293,15 @@ class ChkArchive:
 
         :return: <list/dict> the file list to delete
         """
-        return self.archived_files
+        return self.to_delete
+
+    def get_files_to_move(self):
+        """
+        Access to the list of files to delete
+
+        :return: <list/dict> the file list to of files to move
+        """
+        return self.to_move
 
     def num_all_files(self, utd, utd2):
         """
@@ -237,7 +325,7 @@ class ChkArchive:
             return 0
 
     #TODO change config file ARCHIVED / COMPLETED
-    def files_to_delete(self, utd, utd2):
+    def file_list(self, utd, utd2, add):
         """
         Query the database for the files to delete.  Verify the results are
         valid
@@ -245,12 +333,13 @@ class ChkArchive:
         :param utd: <str> YYYY-MM-DD initial date
         :param utd2: <str> YYYY-MM-DD the final date,  if None,  only one day
                            is searched.
+        :param add: <str> the tail of the query string.
         :return: <dict> the verified data results from the query
         """
-        columns = 'koaid,status,ofname,stage_file,archive_dir,ofname_deleted'
+        columns = 'koaid,status,status_code,ofname,stage_file,'
+        columns += 'process_dir,archive_dir,ofname_deleted'
         key = 'status'
         val = self.archived_key
-        add = 'AND OFNAME_DELETED=0'
         try:
             results = utils.query_rti_api(site, 'search', 'GENERAL',
                                           columns=columns, key=key, val=val,
@@ -296,23 +385,19 @@ class ChkArchive:
         """
         koaid = utils.get_key_val(result, 'koaid')
         status = utils.get_key_val(result, 'status')
+        status_code = utils.get_key_val(result, 'status_code')
         ofname = utils.get_key_val(result, 'ofname')
         stage_file = utils.get_key_val(result, 'stage_file')
-        archive_dir = utils.get_key_val(result, 'archive_dir')
-        deleted = utils.get_key_val(result, 'ofname_deleted')
+        process_dir = utils.get_key_val(result, 'process_dir')
 
-        if (not koaid or not status or not ofname or not archive_dir
+        if (not koaid or not status or not ofname or not process_dir
                 or not stage_file):
             return False, "INCOMPLETE RESULTS"
         elif status != self.archived_key:
             return False, "INVALID STATUS"
-
-        #TODO what about moving without deleting?
-        elif deleted:
-            return False, "FILE ALREADY MARKED AS DELETED"
-        # elif ofname.split('/')[-1] != stage_file.split('/')[-1]:
-        #     return False, "INVALID EQUALITY BETWEEN OFNAME AND STAGE_FILE"
-        elif archive_dir.split('/')[-1] != 'lev0':
+        elif status_code:
+            return False, f"STATUS CODE: {status_code}"
+        elif process_dir.split('/')[-1] != 'lev0':
             return False, "INVALID ARCHIVE DIR"
 
         return True, ""
@@ -329,9 +414,9 @@ class ChkArchive:
 
         for idx, result in enumerate(data):
             file_location = utils.get_key_val(result, 'stage_file')
-            if not utils.chk_file(file_location):
+            if not utils.chk_file_exists(file_location):
                 self.log.warning(f"REMOVING FROM DELETE LIST, ")
-                self.log.warning(f"STAGE FILE NOT FOUND: {result}")
+                self.log.warning(f"STAGE FILE (copy of original) NOT FOUND: {result}")
                 data.pop(idx)
 
         return data
@@ -363,9 +448,10 @@ if __name__ == '__main__':
     metrics = {}
     delete_obj = ToDelete()
     if args.move:
-        metrics['n_moved'], metrics['n_results'] = delete_obj.move_files()
+        metrics['n_moved'], metrics['n_movable'] = delete_obj.store_lev0_files()
+        metrics['n_staged'], metrics['n_stagable'] = delete_obj.store_stage_files()
     if args.remove:
-        metrics['n_deleted'], metrics['n_results'] = delete_obj.delete_files()
+        metrics['n_deleted'], metrics['n_deletable'] = delete_obj.delete_files()
 
     metrics['total_files'] = delete_obj.num_all_files()
 

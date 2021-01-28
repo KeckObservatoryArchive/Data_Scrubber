@@ -11,7 +11,7 @@ from io import StringIO
 from datetime import datetime, timedelta
 
 
-def chk_file(file_location, filename=None):
+def chk_file_exists(file_location, filename=None):
     """
     Check the existence of the file, ie stage_file:
         /s/sdata125/hires6/2020nov23/hires0003.fits
@@ -49,7 +49,7 @@ def send_email(email_msg, mailto, subject):
 
 
 def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
-                  add=None, utd=None, utd2=None):
+                  update_val=None, add=None, utd=None, utd2=None):
     """
     Query the API to get or update information in the KOA RTI DB.
 
@@ -89,12 +89,18 @@ def create_report(metrics):
     :return: <str> the report.
     """
 
-    report = f"\nNumber of files archived: {metrics['n_results']}"
+    report = f"\nResults from deleting OFNAME and moving lev0/stage to storage."
     if 'n_deleted' in metrics:
-        report += f"\nNumber of files deleted: {metrics['n_deleted']}"
+        report = f"\n\nNumber of files deleted: {metrics['n_deleted']}"
+        report += f"\nNumber of files found: {metrics['n_deletable']}"
     if 'n_moved' in metrics:
-        report += f"\nNumber of KOAIDs moved: {metrics['n_moved']}\n"
-    report += f"Total number of files not previously deleted (any status): "
+        report += f"\n\nNumber of lev0/ files moved: {metrics['n_moved']}"
+        report += f"\nNumber of lev0/ files found: {metrics['n_movable']}"
+    if 'n_staged' in metrics:
+        report += f"\n\nNumber of stage files moved: {metrics['n_staged']}"
+        report += f"\nNumber of stage files found: {metrics['n_stagable']}"
+
+    report += f"\n\nTotal number of files not previously deleted (any status): "
     report += f"{metrics['total_files']}"
 
     return report
@@ -161,9 +167,9 @@ def parse_args():
                              "the storage servers.")
     parser.add_argument("--remove", action="store_true",
                         help="delete the files from the instrument servers")
-    parser.add_argument("--storagedir", type=str,
-                        help="Change the path of the storage server from the"
-                             " one in the configuration file.")
+    # parser.add_argument("--storagedir", type=str,
+    #                     help="Change the path of the storage server from the"
+    #                          " one in the configuration file.")
     parser.add_argument("--logdir", type=str, default='log',
                         help="Define the directory for the log.")
     parser.add_argument("--utd", type=str,
