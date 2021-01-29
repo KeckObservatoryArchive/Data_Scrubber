@@ -167,9 +167,6 @@ def parse_args():
                              "the storage servers.")
     parser.add_argument("--remove", action="store_true",
                         help="delete the files from the instrument servers")
-    # parser.add_argument("--storagedir", type=str,
-    #                     help="Change the path of the storage server from the"
-    #                          " one in the configuration file.")
     parser.add_argument("--logdir", type=str, default='log',
                         help="Define the directory for the log.")
     parser.add_argument("--utd", type=str,
@@ -264,3 +261,54 @@ def remote_df(user, ip, path):
             return Result(total, used, free)
         else:
             raise Exception('Path "%s" not found' % path)
+
+
+def inst_disk_usage_ok(inst, config, config_type, log):
+    koa_disk, storage_disk = get_locations(inst, config, config_type)
+    stats = remote_df('koaadmin', 'vm-koaserver5', koa_disk)
+    log.info(f'Disk Space Statistics for {inst} in vm-koaserver5: {koa_disk}.')
+    log.info(f'Total: {stats.total}, Used: {stats.used}, Free: {stats.free}')
+
+    return stats.used < stats.free
+
+
+def get_locations(inst, config, config_type):
+    koa_disk_root = get_config_param(config, 'koa_disk', 'path_root')
+    koa_disk_num = get_config_param(config, 'koa_disk', inst)
+    storage_disk_root = get_config_param(config, config_type, 'storage_root')
+    storage_disk_num = get_config_param(config, 'storage_disk', inst)
+
+    koa_disk = f'{koa_disk_root}{koa_disk_num}'
+    storage_disk = f'{storage_disk_root}{storage_disk_num}'
+
+    return koa_disk, storage_disk
+
+
+def make_storage_dir(storage_dir, storage_root, log):
+    """
+    Create the storage directory.  If it does not exists,  go up
+    creating directories in the path.
+
+    :param storage_dir: <str>
+        ie: /koadata/test_storage/koastorage02/KCWI/koadata28/20210116/lev0/
+    :return: <int> status,  1 on success 0 on failure
+    """
+    try:
+        os.mkdir(storage_dir)
+        log.info(f"created directory: {storage_dir}")
+    except FileExistsError:
+        return 1
+    except FileNotFoundError:
+        log.info(f"Directory: {storage_dir}, does not exist yet.")
+        one_down = '/'.join(storage_dir.split('/')[:-1])
+        if len(one_down) > len(storage_root):
+            make_storage_dir(one_down, storage_root, log)
+        else:
+            return 0
+    except:
+        return 0
+
+    # rewind
+    return_val = make_storage_dir(storage_dir, storage_root, log)
+
+    return return_val

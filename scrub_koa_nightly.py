@@ -35,12 +35,20 @@ class StoreData:
         end = datetime.strptime(utd2, '%Y-%m-%d')
         diff = end - start
 
+        dirs_made = []
         for i in range(diff.days + 1):
             utd = (start + timedelta(i)).strftime('%Y%m%d')
             log.info(f"working on {inst} date: {utd}")
             for func in funcs:
-                self.koa_disk, self.storage_disk = self.get_locations(inst)
+                self.koa_disk, self.storage_disk = utils.get_locations(inst, config, config_type)
                 files_path, store_path = func(utd, inst)
+
+                if store_path not in dirs_made:
+                    if utils.make_storage_dir(store_path, storage_root, log) == 0:
+                        log.warning(f"Error creating storage dir: {store_path}")
+                        continue
+                    dirs_made.append(store_path)
+
                 self._rsync_files(files_path, store_path)
 
     @staticmethod
@@ -63,7 +71,7 @@ class StoreData:
 
         try:
             log.info(f"rsync cmd: {rsync_cmd}")
-            subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
+            # subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
         except subprocess.CalledProcessError:
             log.warning(f"Move failed: {rsync_cmd}")
             return 0
@@ -71,24 +79,7 @@ class StoreData:
         return 1
 
     def disk_usage_ok(self, inst):
-        koa_disk, storage_disk = self.get_locations(inst)
-        stats = utils.remote_df('koaadmin', 'vm-koaserver5', koa_disk)
-        log.info(f'Disk Space Statistics for {inst} in vm-koaserver5: {koa_disk}.')
-        log.info(f'Total: {stats.total}, Used: {stats.used}, Free: {stats.free}')
-
-        return stats.used < stats.free
-
-    @staticmethod
-    def get_locations(inst):
-        koa_disk_root = utils.get_config_param(config, 'koa_disk', 'path_root')
-        koa_disk_num = utils.get_config_param(config, 'koa_disk', inst)
-        storage_disk_root = utils.get_config_param(config, config_type, 'storage_root')
-        storage_disk_num = utils.get_config_param(config, 'storage_disk', inst)
-
-        koa_disk = f'{koa_disk_root}{koa_disk_num}'
-        storage_disk = f'{storage_disk_root}{storage_disk_num}'
-
-        return koa_disk, storage_disk
+        return utils.inst_disk_usage_ok(inst, config, config_type, log)
 
     def log_files_loc(self, utd, inst):
         files_path = f'{self.koa_disk}/{inst}/dep_{inst}_{utd}.log'

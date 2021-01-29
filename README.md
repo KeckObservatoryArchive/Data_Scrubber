@@ -99,7 +99,7 @@ Move:
                '/koadata/test_storage/koastorage03/NIRES/stage/NIRES/20210124//s/sdata1500/nires6/2021jan24/'
                
  
-    Report / Email generated:
+   Report / Email generated:
    
         Number of files deleted: 368
         Number of files found: 368
@@ -113,3 +113,13 @@ Move:
         Total number of files not previously deleted (any status): 526
         
         
+   Required:
+   
+   koarti ssh key must be on vm-koaserver5 (in authorized_keys):
+   
+        * ssh koarti@vm-koarti.keck.hawaii.edu
+        
+        * ssh-copy-id -i ~/.ssh/rsa_rsa.pub koaadmin@vm-koaserver5
+        
+        
+   
