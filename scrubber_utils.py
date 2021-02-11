@@ -111,7 +111,6 @@ def create_logger(name, logdir):
     Set the logger for writing to a log file,  and capturing the
     warnings/errors to be sent in an email.
 
-    :param name: <str> root logname,  date+time will be added as suffix.
     :param logdir: <str> the director for the log file to be written
     :return: <str> log_name (including date+time)
              <_io.StringIO> the log stream handler

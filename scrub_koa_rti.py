@@ -16,6 +16,7 @@ class ToDelete:
         self.utd2 = args.utd2
         self.log = logging.getLogger(log_name)
         self.database_obj = ChkArchive()
+        self.dirs_made = []
         self.to_delete = self.database_obj.get_files_to_delete()
         self.to_move = self.database_obj.get_files_to_move()
 
@@ -33,83 +34,98 @@ class ToDelete:
         """
         This will find and delete the files for the specified date range.
 
-        :return: <int> number deleted, number found matching deletion criteria.
+        :return: <(int, int)> number deleted, number found to delete.
         """
-        if not self.to_delete:
-            return 0, 0
-
-        n_deleted = 0
-        for result in self.to_delete:
-            full_filename = result['ofname']
-            try:
-                self.log.info(f"os.remove {full_filename}")
-            except OSError as error:
-                self.log.warning(f"Error while removing: {full_filename}, "
-                                 f"{error}")
-                continue
-
-            self.mark_deleted(result['koaid'])
-            n_deleted += 1
-
-        return n_deleted, len(self.to_delete)
+        return self.delete_mv_list(self.to_delete, self.delete_func)
 
     def store_stage_files(self):
         """
         move the original file copy (stage_file) to storage.
 
-        :return: <int> number moved, number found matching move criteria.
+        :return: <(int, int)> number moved, number found matching move criteria.
         """
-        if not self.to_move:
-            return 0, 0
+        return self.delete_mv_list(self.to_move, self.store_stage_func)
 
-        num_moved = 0
-        dirs_made = []
-        for result in self.to_delete:
-            koaid = result['koaid']
-            mv_path = result['stage_file']
-            ofname = result['ofname']
-
-            storage_dir, dirs_made = self.get_storage_dir(koaid, mv_path,
-                                                          dirs_made, ofname)
-            if not storage_dir:
-                continue
-
-            num_moved += self._rsync_files(mv_path, storage_dir)
-
-        return num_moved, len(self.to_delete)
-
-    # TODO this only copies,  does not move files.
     def store_lev0_files(self):
         """
         Move the DEP files to storage.
 
-        :return: <int> number moved, number found matching move criteria.
+        :return: <(int, int)> number moved, number found matching move criteria.
         """
-        if not self.to_move:
+        return self.delete_mv_list(self.to_move, self.store_lev0_func)
+
+    def delete_mv_list(self, file_list, func):
+        """
+        Skeleton function to delete or move a file list,  file by file.
+
+        :return: <int> number moved/delted, number in list.
+        """
+        if not file_list:
             return 0, 0
 
-        num_moved = 0
-        dirs_made = []
-        for result in self.to_delete:
-            koaid = result['koaid']
-            mv_path = result['process_dir']
+        n_files_touched = 0
+        for result in file_list:
+            n_files_touched += func(result)
 
-            storage_dir, dirs_made = self.get_storage_dir(koaid, mv_path,
-                                                          dirs_made)
-            if not storage_dir:
-                continue
+        return n_files_touched, len(file_list)
 
-            num_moved += self._rsync_files(mv_path, storage_dir, koaid)
+    def delete_func(self, result):
+        """
+        delete by file.
 
-        return num_moved, len(self.to_delete)
+        :param result: <dict> single db row,  the query result for the file.
+        :return: <int> 1 if file removed successfully,  or 1
+        """
+        full_filename = result['ofname']
+        try:
+            self.log.info(f"os.remove {full_filename}")
+        except OSError as error:
+            self.log.warning(f"Error while removing: {full_filename}, {error}")
+            return 0
 
-    def get_storage_dir(self, koaid, mv_path, dirs_made, ofname=None):
+        self.mark_deleted(result['koaid'])
+
+        return 1
+
+    def store_stage_func(self, result):
+        """
+        move the stage file to storage.
+
+        :param result: <dict> single db row,  the query result for the file.
+        :return: <int> 1 if file removed successfully,  or 1
+        """
+        koaid = result['koaid']
+        mv_path = result['stage_file']
+        ofname = result['ofname']
+
+        storage_dir = self.get_storage_dir(koaid, mv_path, ofname=ofname)
+        if not storage_dir:
+            return 0
+
+        return self._rsync_files(mv_path, storage_dir)
+
+    def store_lev0_func(self, result):
+        """
+        move the files matching koaid to storage.
+
+        :param result: <dict> single db row,  the query result for the file.
+        :return: <int> 1 if file removed successfully,  or 1
+        """
+        koaid = result['koaid']
+        mv_path = result['process_dir']
+
+        storage_dir = self.get_storage_dir(koaid, mv_path)
+        if not storage_dir:
+            return 0
+
+        return self._rsync_files(mv_path, storage_dir, koaid)
+
+    def get_storage_dir(self, koaid, mv_path, ofname=None):
         """
         get storage location and make the directory if needed.
 
         :param koaid: <str> the koaid of files.
         :param mv_path: <str> the path to the files(s) to move
-        :param dirs_made: <list> the directories already created
         :param ofname: <str> ofname (dep_status table)
         :return: <str/list> storage directory (or None) and list of storage dirs
         """
@@ -118,16 +134,16 @@ class ToDelete:
         if not storage_dir:
             self.log.warning("Could not determine storage path!")
             self.log.warning(f"Files at: {mv_path} where not moved!")
-            return None, dirs_made
+            return None
 
-        if storage_dir not in dirs_made:
+        if storage_dir not in self.dirs_made:
             if self.make_storage_dir(storage_dir) == 0:
                 log.warning(f"Error creating storage dir: {storage_dir}")
-                return None, dirs_made
+                return None
 
-            dirs_made.append(storage_dir)
+            self.dirs_made.append(storage_dir)
 
-        return storage_dir, dirs_made
+        return storage_dir
 
     def make_storage_dir(self, storage_dir):
         """
@@ -324,7 +340,6 @@ class ChkArchive:
         except:
             return 0
 
-    #TODO change config file ARCHIVED / COMPLETED
     def file_list(self, utd, utd2, add):
         """
         Query the database for the files to delete.  Verify the results are
