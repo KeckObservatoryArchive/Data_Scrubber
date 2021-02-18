@@ -84,8 +84,6 @@ class StoreData:
                     dirs_made.append(store_path)
 
                 if itr != len_funcs:
-                    # self.n_koa_before += self._count_koa(files_path)
-                    # self.n_store_before += self._count_store(store_path, utd)
                     self.n_koa_before += utils.count_koa(files_path, log)
                     self.n_store_before += utils.count_store(user, store_server,
                                                              store_path, utd, log)
@@ -93,65 +91,9 @@ class StoreData:
                 self._rsync_files(files_path, store_path)
 
                 if itr != len_funcs:
-                    # self.n_koa_after += self._count_koa(files_path)
-                    # self.n_store_after += self._count_store(store_path, utd)
                     self.n_koa_after += utils.count_koa(files_path, log)
                     self.n_store_after += utils.count_store(user, store_server,
                                                              store_path, utd, log)
-
-    # @staticmethod
-    # def _count_koa(files_path):
-    #     """
-    #     Count the files to be moved.  These are the local KOA files.
-    #
-    #     :param files_path: <str> the path to the KOA (DEP) files.
-    #     :return:
-    #     """
-    #     n_koa = 0
-    #     for _, _, files in walk(files_path):
-    #         n_koa += len(files)
-    #
-    #     log.info(f"files at vm-koaserver5:{files_path}: {n_koa}")
-    #
-    #     return n_koa
-    #
-    # def _count_store(self, store_path, utd):
-    #     """
-    #     Count the files on the remote storage server.
-    #
-    #     :param store_path: <str> the path to store the files.
-    #     :param utd: <str> date YYYYMMDD
-    #     :return: the file count for the directory
-    #     """
-    #     n_store = 0
-    #     cmd = ['ssh', f'{user}@{store_server}', 'find',
-    #            f'{store_path}/{utd}/', '-type', 'f', '|', 'wc', '-l']
-    #
-    #     try:
-    #         if self._dir_exists(store_path, utd) == 0:
-    #             return 0
-    #         n_store = int(subprocess.check_output(cmd).decode('utf-8'))
-    #     except Exception as err:
-    #         log.warning(f'Error: {err}')
-    #         log.warning(f'Could not count files for: {store_path}')
-    #
-    #     log.info(f"files at {store_server}:{store_path}/{utd}: {n_store}")
-    #
-    #     return n_store
-    #
-    # @staticmethod
-    # def _dir_exists(store_path, utd):
-    #     """
-    #     Check if directory exists on remote server.
-    #
-    #     :param store_path: <str> the path to store the files.
-    #     :param utd: <str> date YYMMDD
-    #     :return: <bool> 1 if file exists
-    #     """
-    #     cmd = ['ssh', f'{user}@{store_server}', 'test', '-d',
-    #            f'{store_path}/{utd}/', '&&', 'echo', '1', '||', 'echo', '0']
-    #
-    #     return int(subprocess.check_output(cmd).decode('utf-8'))
 
     @staticmethod
     def _rsync_files(files_path, store_path):
