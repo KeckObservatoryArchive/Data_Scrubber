@@ -49,7 +49,7 @@ def send_email(email_msg, mailto, subject):
 
 
 def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
-                  update_val=None, add=None, utd=None, utd2=None):
+                  utd=None, utd2=None, update_val=None, add=None):
     """
     Query the API to get or update information in the KOA RTI DB.
 
@@ -75,13 +75,15 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
         if dict_val and dict_key not in ['url', 'qtype', 'type_val']:
             url += f"&{dict_key}={dict_val}"
 
+    print("URL", url)
+
     response = requests.get(url)
     results = response.content
 
     return results
 
 
-def create_report(metrics):
+def create_rti_report(metrics):
     """
     Form the report to be emailed at the end of a scrub run.
 
@@ -91,19 +93,70 @@ def create_report(metrics):
 
     report = f"\nResults from deleting OFNAME and moving lev0/stage to storage."
     if 'n_deleted' in metrics:
-        report = f"\n\nNumber of files deleted: {metrics['n_deleted']}"
-        report += f"\nNumber of files found: {metrics['n_deletable']}"
+        report = f"\n\n{metrics['n_deleted']} : Files deleted."
+        report += f"\n{metrics['n_deletable']} : Files found."
     if 'n_moved' in metrics:
-        report += f"\n\nNumber of lev0/ files moved: {metrics['n_moved']}"
-        report += f"\nNumber of lev0/ files found: {metrics['n_movable']}"
+        report += f"\n\n{metrics['n_moved']} : lev0/ files moved."
+        report += f"\n{metrics['n_movable']} : lev0/ files found."
     if 'n_staged' in metrics:
-        report += f"\n\nNumber of stage files moved: {metrics['n_staged']}"
-        report += f"\nNumber of stage files found: {metrics['n_stagable']}"
+        report += f"\n\n{metrics['n_staged']} : Stage files moved."
+        report += f"\n{metrics['n_stagable']} : Stage files found."
+    if 'koa_before' in metrics:
+        report += f"\n\n{metrics['koa_before']} : Total KOA files BEFORE."
+        report += f"\n{metrics['store_before']} : Total Storage files BEFORE."
+        report += f"\n{metrics['koa_after']} : Total KOA files AFTER."
+        report += f"\n{metrics['store_after']} : Total Storage files AFTER."
 
     report += f"\n\nTotal number of files not previously deleted (any status): "
     report += f"{metrics['total_files']}"
 
     return report
+
+
+def create_nightly_report(metrics, utd, utd2):
+    """
+    Form the report to be emailed at the end of a scrub run.
+
+    :param metrics: <dict> the values of files,  moved, removed, total.
+    :return: <str> the report.
+    """
+
+    report = f"KOA DEP Files moved to storage for dates: {utd} to {utd2}"
+    report += f"\n\n{metrics['koa_before']} : Total KOA files BEFORE."
+    report += f"\n{metrics['store_before']} : Total Storage files BEFORE."
+    report += f"\n{metrics['koa_after']} : Total KOA files AFTER."
+    report += f"\n{metrics['store_after']} : Total Storage files AFTER."
+
+    diff_koa = metrics['koa_before'] - metrics['koa_after']
+    diff_mv = metrics['store_after'] - metrics['store_before']
+
+    report += f"\n\n{diff_koa} : Number of files removed from KOA."
+    report += f"\n{diff_mv} : Number of files moved to storage.\n"
+
+    return report
+
+
+def write_emails(config, log_stream, report, prefix=''):
+    """
+    Finish up the scrubbers,  create and send the emails.
+
+    :param config: the pointer to the config file.
+    :param log_stream: the logging stream.
+    :param report: the report to send.
+    :param prefix: prefix for the subject of the email.
+    """
+    now = datetime.now().strftime('%Y-%m-%d')
+    mailto = get_config_param(config, 'email', 'admin')
+    send_email(report, mailto, f'{prefix} Scrubber Report: {now}')
+
+    if log_stream:
+        log_contents = log_stream.getvalue()
+        log_stream.close()
+
+        if log_contents:
+            mailto = get_config_param(config, 'email', 'warnings')
+            send_email(log_contents, mailto,
+                       f'{prefix} Scrubber Warnings: {now}')
 
 
 def create_logger(name, logdir):
@@ -149,7 +202,6 @@ def create_logger(name, logdir):
     return log_name, log_stream
 
 
-#TODO update default log directory
 def parse_args():
     """
     Parse the command line arguments.
@@ -169,10 +221,10 @@ def parse_args():
     parser.add_argument("--logdir", type=str, default='log',
                         help="Define the directory for the log.")
     parser.add_argument("--utd", type=str,
-                        default=(now - timedelta(days=14)).strftime('%Y-%m-%d'),
+                        default=(now - timedelta(days=21)).strftime('%Y-%m-%d'),
                         help="Start date to process YYYY-MM-DD.")
     parser.add_argument("--utd2", type=str,
-                        default=(now - timedelta(days=21)).strftime('%Y-%m-%d'),
+                        default=(now - timedelta(days=14)).strftime('%Y-%m-%d'),
                         help="End date to process YYYY-MM-DD.")
     parser.add_argument("--include_inst", type=str,
                         default=None,
@@ -263,6 +315,16 @@ def remote_df(user, ip, path):
 
 
 def inst_disk_usage_ok(inst, config, config_type, log):
+    """
+    Determine if the used disk space is less than the free disk space.
+
+    :param inst: <str> the instrument name
+    :param config: <class 'configparser.ConfigParser'>
+        the pointer to the config file
+    :param config_type: <str> either dev or default
+    :param log: <class 'logging.Logger'> the log
+    :return: <bool> True if disk used < disk free
+    """
     koa_disk, storage_disk = get_locations(inst, config, config_type)
     stats = remote_df('koaadmin', 'vm-koaserver5', koa_disk)
     log.info(f'Disk Space Statistics for {inst} in vm-koaserver5: {koa_disk}.')
@@ -272,6 +334,14 @@ def inst_disk_usage_ok(inst, config, config_type, log):
 
 
 def get_locations(inst, config, config_type):
+    """
+    Determine the directories on each of the disks,  vm-koaserver5 and
+    storageserver.
+
+    :param inst: <str> the instrument
+    :param config: the config file pointer
+    :return: <(str,str)> the paths to the files
+    """
     koa_disk_root = get_config_param(config, 'koa_disk', 'path_root')
     koa_disk_num = get_config_param(config, 'koa_disk', inst)
     storage_disk_root = get_config_param(config, config_type, 'storage_root')
@@ -281,6 +351,20 @@ def get_locations(inst, config, config_type):
     storage_disk = f'{storage_disk_root}{storage_disk_num}'
 
     return koa_disk, storage_disk
+
+
+def make_remote_dir(host, dir_name, log):
+    """
+    Create a directory on a remote server.
+
+    :param host: <str> user@server_name
+    :param dir_name: <str> the directory to create
+    :param log: <class 'logging.Logger'> the log
+    :return:
+    """
+    cmd = ["ssh", host, "mkdir", "-p", dir_name]
+    log.info(f"created directory: {host}:{dir_name}")
+    subprocess.run(cmd, stdout=subprocess.DEVNULL, check=True)
 
 
 def make_storage_dir(storage_dir, storage_root, log):
@@ -311,3 +395,63 @@ def make_storage_dir(storage_dir, storage_root, log):
     return_val = make_storage_dir(storage_dir, storage_root, log)
 
     return return_val
+
+
+def count_koa(files_path, log):
+    """
+    Count the files to be moved.  These are the local KOA files.
+
+    :param files_path: <str> the path to the KOA (DEP) files.
+    :return:
+    """
+    n_koa = 0
+    for _, _, files in os.walk(files_path):
+        n_koa += len(files)
+
+    log.info(f"{n_koa} : files at {files_path}.")
+
+    return n_koa
+
+
+def count_store(user, store_server, store_path, utd, log):
+    """
+    Count the files on the remote storage server.
+
+    :param user:
+    :param store_server:
+    :param store_path: <str> the path to store the files.
+    :param utd: <str> date YYYYMMDD
+    :return: the file count for the directory
+    """
+    n_store = 0
+    cmd = ['ssh', f'{user}@{store_server}', 'find',
+           f'{store_path}/{utd}/', '-type', 'f', '|', 'wc', '-l']
+
+    try:
+        if dir_exists(user, store_server, store_path, utd) == 0:
+            return 0
+        n_store = int(subprocess.check_output(cmd).decode('utf-8'))
+    except Exception as err:
+        log.warning(f'Error: {err}')
+        log.warning(f'Could not count files for: {store_path}')
+
+    log.info(f"{n_store} : files at {store_server}:{store_path}/{utd}")
+
+    return n_store
+
+
+def dir_exists(user, store_server, store_path, utd):
+    """
+    Check if directory exists on remote server.
+
+    :param user:
+    :param store_server:
+    :param store_path: <str> the path to store the files.
+    :param utd: <str> date YYMMDD
+    :return: <bool> 1 if file exists
+    """
+    cmd = ['ssh', f'{user}@{store_server}', 'test', '-d',
+           f'{store_path}/{utd}/', '&&', 'echo', '1', '||', 'echo', '0']
+
+    return int(subprocess.check_output(cmd).decode('utf-8'))
+

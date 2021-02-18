@@ -2,7 +2,9 @@ import argparse
 import configparser
 import logging
 import subprocess
+# from os import path, walk
 from os import path
+from sys import exit
 from datetime import datetime, timedelta
 import scrubber_utils as utils
 
@@ -17,20 +19,52 @@ class StoreData:
         self.inst = inst
         self.koa_disk = None
         self.storage_disk = None
+        self.n_koa_before = 0
+        self.n_koa_after = 0
+        self.n_store_before = 0
+        self.n_store_after = 0
+
+    def get_metrics(self):
+        """
+        Access to the file counts.
+
+        :return: <dict> the count,  before and after moving files.
+        """
+        metrics = {'store_before': self.n_store_before,
+                   'store_after': self.n_store_after,
+                   'koa_before': self.n_koa_before,
+                   'koa_after': self.n_koa_after}
+
+        return metrics
 
     def move_data(self, utd1, utd2):
+        """
+        Move the data.
+
+        :param utd1: <str> date YYYYMMDD
+        :param utd2: <str> date YYYYMMDD
+        """
         log.info(f"moving dates: {utd1} - {utd2} for instruments: {self.inst}")
         if type(self.inst) == list:
             for inst in self.inst:
-                self.disk_usage_ok(inst)
+                utils.inst_disk_usage_ok(inst, config, config_type, log)
                 self.move_inst_data(utd1, utd2, inst)
         else:
-            self.disk_usage_ok(self.inst)
+            utils.inst_disk_usage_ok(self.inst, config, config_type, log)
             self.move_inst_data(utd1, utd2, self.inst)
 
     def move_inst_data(self, utd1, utd2, inst):
+        """
+        The main move function to move KOA (DEP) files from local directories
+        to the remote storage server.
+
+        :param utd1: <str> date YYYYMMDD
+        :param utd2: <str> date YYYYMMDD
+        :param inst: <str> the instrument name
+        """
         funcs = [self.stage_data_loc, self.processed_data_loc,
                  self.log_files_loc]
+        len_funcs = len(funcs) - 1
         start = datetime.strptime(utd1, '%Y-%m-%d')
         end = datetime.strptime(utd2, '%Y-%m-%d')
         diff = end - start
@@ -38,18 +72,86 @@ class StoreData:
         dirs_made = []
         for i in range(diff.days + 1):
             utd = (start + timedelta(i)).strftime('%Y%m%d')
-            log.info(f"working on {inst} date: {utd}")
-            for func in funcs:
+            log.info(f"working on {inst} date: {utd}\n")
+
+            for itr, func in enumerate(funcs):
                 self.koa_disk, self.storage_disk = utils.get_locations(inst, config, config_type)
                 files_path, store_path = func(utd, inst)
 
                 if store_path not in dirs_made:
-                    if utils.make_storage_dir(store_path, storage_root, log) == 0:
-                        log.warning(f"Error creating storage dir: {store_path}")
-                        continue
+                    utils.make_remote_dir(f'{user}@{store_server}',
+                                          store_path, log)
                     dirs_made.append(store_path)
 
+                if itr != len_funcs:
+                    # self.n_koa_before += self._count_koa(files_path)
+                    # self.n_store_before += self._count_store(store_path, utd)
+                    self.n_koa_before += utils.count_koa(files_path, log)
+                    self.n_store_before += utils.count_store(user, store_server,
+                                                             store_path, utd, log)
+
                 self._rsync_files(files_path, store_path)
+
+                if itr != len_funcs:
+                    # self.n_koa_after += self._count_koa(files_path)
+                    # self.n_store_after += self._count_store(store_path, utd)
+                    self.n_koa_after += utils.count_koa(files_path, log)
+                    self.n_store_after += utils.count_store(user, store_server,
+                                                             store_path, utd, log)
+
+    # @staticmethod
+    # def _count_koa(files_path):
+    #     """
+    #     Count the files to be moved.  These are the local KOA files.
+    #
+    #     :param files_path: <str> the path to the KOA (DEP) files.
+    #     :return:
+    #     """
+    #     n_koa = 0
+    #     for _, _, files in walk(files_path):
+    #         n_koa += len(files)
+    #
+    #     log.info(f"files at vm-koaserver5:{files_path}: {n_koa}")
+    #
+    #     return n_koa
+    #
+    # def _count_store(self, store_path, utd):
+    #     """
+    #     Count the files on the remote storage server.
+    #
+    #     :param store_path: <str> the path to store the files.
+    #     :param utd: <str> date YYYYMMDD
+    #     :return: the file count for the directory
+    #     """
+    #     n_store = 0
+    #     cmd = ['ssh', f'{user}@{store_server}', 'find',
+    #            f'{store_path}/{utd}/', '-type', 'f', '|', 'wc', '-l']
+    #
+    #     try:
+    #         if self._dir_exists(store_path, utd) == 0:
+    #             return 0
+    #         n_store = int(subprocess.check_output(cmd).decode('utf-8'))
+    #     except Exception as err:
+    #         log.warning(f'Error: {err}')
+    #         log.warning(f'Could not count files for: {store_path}')
+    #
+    #     log.info(f"files at {store_server}:{store_path}/{utd}: {n_store}")
+    #
+    #     return n_store
+    #
+    # @staticmethod
+    # def _dir_exists(store_path, utd):
+    #     """
+    #     Check if directory exists on remote server.
+    #
+    #     :param store_path: <str> the path to store the files.
+    #     :param utd: <str> date YYMMDD
+    #     :return: <bool> 1 if file exists
+    #     """
+    #     cmd = ['ssh', f'{user}@{store_server}', 'test', '-d',
+    #            f'{store_path}/{utd}/', '&&', 'echo', '1', '||', 'echo', '0']
+    #
+    #     return int(subprocess.check_output(cmd).decode('utf-8'))
 
     @staticmethod
     def _rsync_files(files_path, store_path):
@@ -59,41 +161,52 @@ class StoreData:
         :param files_path: <str> the archive path or the DEP files.
         :param store_path: <str> the path to store the files.
         """
-        if not args.dev:
-            log.warning("Not ready to start moving files: use --dev")
-            return
-
-        # TODO
-        # command = 'rsync --remove-source-files -av -e ssh koaadmin@vm-koaserver5:FROMLOC TOLOC'
-
-        rsync_cmd = ["rsync", "-ave", "ssh",
-                     "koaadmin@vm-koaserver5:" + files_path, store_path]
+        rsync_cmd = ["rsync", "-avz", "-e", "ssh", files_path,
+                     f'{user}@{store_server}:{store_path}']
 
         try:
             log.info(f"rsync cmd: {rsync_cmd}")
-            # subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
+            subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
         except subprocess.CalledProcessError:
             log.warning(f"Move failed: {rsync_cmd}")
-            return 0
+            return 1
 
-        return 1
-
-    def disk_usage_ok(self, inst):
-        return utils.inst_disk_usage_ok(inst, config, config_type, log)
+        return 0
 
     def log_files_loc(self, utd, inst):
+        """
+        Compose the path to the KOA log files.
+
+        :param utd: <str> date YYYYMMDD
+        :param inst: <str> the instrument name
+        :return: <(<str>, <str>)> KOA log path,  path to storage
+        """
         files_path = f'{self.koa_disk}/{inst}/dep_{inst}_{utd}.log'
         store_path = f'{self.storage_disk}/{inst}/logs/'
 
         return files_path, store_path
 
     def processed_data_loc(self, utd, inst):
+        """
+        Compose the path to the Processed (DEP) KOA files.
+
+        :param utd: <str> date YYYYMMDD
+        :param inst: <str> the instrument name
+        :return: <(<str>, <str>)> KOA DEP path,  path to storage
+        """
         files_path = f'{self.koa_disk}/{inst}/{utd}'
         store_path = f'{self.storage_disk}/{inst}/{self.koa_disk}/'
 
         return files_path, store_path
 
     def stage_data_loc(self, utd, inst):
+        """
+        Compose the path to the KOA stage files.
+
+        :param utd: <str> date YYYYMMDD
+        :param inst: <str> the instrument name
+        :return: <(<str>, <str>)> KOA stage path,  path to storage
+        """
         files_path = f'{self.koa_disk}/stage/{inst}/{utd}'
         store_path = f'{self.storage_disk}/{inst}/stage/{inst}/'
 
@@ -120,6 +233,10 @@ def parse_args():
 
 
 if __name__ == '__main__':
+    """
+    To run:
+        python3 scrub_koa_nightly.py --dev
+    """
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
 
@@ -129,8 +246,11 @@ if __name__ == '__main__':
         config_type = "DEV"
     else:
         config_type = "DEFAULT"
+        exit("ONLY READY FOR DEV MODE! use --dev")
 
     site = utils.get_config_param(config, config_type, 'site')
+    user = utils.get_config_param(config, config_type, 'user')
+    store_server = utils.get_config_param(config, config_type, 'store_server')
     storage_root = utils.get_config_param(config, config_type, 'storage_root')
 
     log_dir = utils.get_config_param(config, config_type, 'log_dir')
@@ -139,3 +259,9 @@ if __name__ == '__main__':
 
     delete_obj = StoreData(args.inst)
     delete_obj.move_data(args.utd, args.utd2)
+
+    # send a report of the scrub
+    metrics = delete_obj.get_metrics()
+    report = utils.create_nightly_report(metrics, args.utd, args.utd2)
+    log.info(report)
+    utils.write_emails(config, log_stream, report, 'KOA')

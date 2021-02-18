@@ -6,7 +6,6 @@ Functions:
     move ARCHIVE_DIR (dep_status table) files to storage.
     move STAGE_FILE (dep_status table) files to storage.
 
-
 Parameters:
 
     --dev"
@@ -115,11 +114,63 @@ Move:
         
    Required:
    
-   koarti ssh key must be on vm-koaserver5 (in authorized_keys):
+   koarti ssh key must be on vm-koaserver5 and storageserver
+   (in authorized_keys):
    
         * ssh koarti@vm-koarti.keck.hawaii.edu
-        
         * ssh-copy-id -i ~/.ssh/rsa_rsa.pub koaadmin@vm-koaserver5
         
+   Cron:
+    koarti@vm-koarti
+       0  9 * * 5 /usr/local/home/koarti/lfuhrman/Scrubber/scrub.csh > /dev/null 2>&1
+
         
+# KOA Nightly DEP Data Scrubber
+
+Functions:
+
+    move the KOA DEP files from vm-koaserver5 (defined in the configuration
+    file) to the storageserver.  The function is intended for the KOA
+    processed data that is processed each night,  not for realtime-ingestion (RTI).
+
+
+Parameters:
+    --inst
+        The instrument name, default is all instruments (defined in
+        scrubber_config.ini)
+    --utd
+        define the UT start date,  format: YYYY-MM-DD. The default
+        is 21 days before the current date.
+    --utd2
+        define the UT end date,  format: YYYY-MM-DD. The default
+        is 14 days before the current date.
+    --dev
+        test mode only copies data,  it does not remove the data
+        from vm-koaserver5.  This is configured in the 
+        scrubber_config.ini file.
+
+
+Logs:
+    written to,  and can be changed in the configuration file.
+        /log/scrubber_logs/koa_scrubber_<YYYYMMDD>_<HH:MM:SS>.log
+        
+
+Report / Email generated:
+   
+    KOA DEP Files moved to storage for dates: 2021-02-02 to 2021-02-03
+    
+    8460 : Total KOA files BEFORE.
+    8460 : Total Storage files BEFORE.
+    8460 : Total KOA files AFTER.
+    8460 : Total Storage files AFTER.
+    
+    0 :Number of files removed from KOA.
+    0 :Number of files moved to storage.
+
+
+Cron runs on vm-koaserver5:
+
+27 14 * * * /usr/local/anaconda3-5.0.0.1/bin/python /usr/local/kroot/archive/scrubber/scrub_koa_nightly.py --dev > /dev/null 2>&1
+   
+   
    

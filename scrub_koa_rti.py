@@ -3,7 +3,6 @@ import configparser
 import logging
 import json
 import subprocess
-from datetime import datetime
 import scrubber_utils as utils
 
 APP_PATH = os.path.abspath(os.path.dirname(__file__))
@@ -19,6 +18,10 @@ class ToDelete:
         self.dirs_made = []
         self.to_delete = self.database_obj.get_files_to_delete()
         self.to_move = self.database_obj.get_files_to_move()
+        self.n_koa_before = 0
+        self.n_store_before = 0
+        self.n_koa_after = 0
+        self.n_store_after = 0
 
     def num_all_files(self):
         """
@@ -28,6 +31,14 @@ class ToDelete:
         :return: <int> number of files in the data range
         """
         return self.database_obj.num_all_files(self.utd, self.utd2)
+
+    def get_num_moved(self):
+        num_files = {'store_before': self.n_store_before,
+                     'store_after': self.n_store_after,
+                     'koa_before': self.n_koa_before,
+                     'koa_after': self.n_koa_after}
+
+        return num_files
 
     # TODO this only logs the info,  it does not remove any files
     def delete_files(self):
@@ -137,44 +148,12 @@ class ToDelete:
             return None
 
         if storage_dir not in self.dirs_made:
-            if self.make_storage_dir(storage_dir) == 0:
-                log.warning(f"Error creating storage dir: {storage_dir}")
-                return None
-
+            utils.make_remote_dir(f'{user}@{store_server}', storage_dir, log)
             self.dirs_made.append(storage_dir)
 
         return storage_dir
 
-    def make_storage_dir(self, storage_dir):
-        """
-        Create the storage directory.  If it does not exists,  go up
-        creating directories in the path.
-
-        :param storage_dir: <str>
-            ie: /koadata/test_storage/koastorage02/KCWI/koadata28/20210116/lev0/
-        :return: <int> status,  1 on success 0 on failure
-        """
-        try:
-            os.mkdir(storage_dir)
-            self.log.info(f"created directory: {storage_dir}")
-        except FileExistsError:
-            return 1
-        except FileNotFoundError:
-            self.log.info(f"Directory: {storage_dir}, does not exist yet.")
-            one_down = '/'.join(storage_dir.split('/')[:-1])
-            if len(one_down) > len(storage_root):
-                self.make_storage_dir(one_down)
-            else:
-                return 0
-        except:
-            return 0
-
-        # rewind
-        return_val = self.make_storage_dir(storage_dir)
-
-        return return_val
-
-    # TODO only logs the command not update being performed (change on API)
+    # TODO only logs the command update not being performed (change on API)
     def mark_deleted(self, koaid):
         """
         Add deleted to the dep_status (ofname_deleted) table for the
@@ -225,18 +204,22 @@ class ToDelete:
         :param mv_path: <str> the archive path or the DEP files.
         :param storage_dir: <str> the path to store the files.
         """
-        if not args.dev:
-            log.warning("Not ready to start moving files: use --dev")
-            # TODO
-            # "rsync --remove-source-files -av -e ssh koaadmin@"$server":"$dir"
-            #               "$storageDir[$i]"
+        # TODO
+        # "rsync --remove-source-files -av -e ssh koaadmin@"$server":"$dir"
+        #               "$storageDir[$i]"
 
-        server_str = f"{mv_path}"
+        self.n_koa_before += utils.count_koa(mv_path, log)
+        self.n_store_before += utils.count_store(user, store_server, '',
+                                                 storage_dir, log)
+
+        server_str = f"{mv_path}/"
+        store_loc = f'{user}@{store_server}:{storage_dir}'
         if koaid:
-            rsync_cmd = ["rsync", "-av", "--include", koaid + "*",
-                         "--exclude", "*", server_str, storage_dir]
+            rsync_cmd = ["rsync", "-avz", "-e", "ssh",
+                         "--include", f"{koaid}*",
+                         "--exclude", "*", server_str, store_loc]
         else:
-            rsync_cmd = ["rsync", "-av", server_str, storage_dir]
+            rsync_cmd = ["rsync", "-avz", server_str, store_loc]
 
         self.log.info(f"rsync cmd: {rsync_cmd}")
 
@@ -245,6 +228,10 @@ class ToDelete:
         except subprocess.CalledProcessError:
             log.warning(f"File(s) {mv_path} not moved to storage")
             return 0
+
+        self.n_koa_after += utils.count_koa(mv_path, log)
+        self.n_store_after += utils.count_store(user, store_server, '',
+                                                storage_dir, log)
 
         return 1
 
@@ -438,6 +425,10 @@ class ChkArchive:
 
 
 if __name__ == '__main__':
+    """
+    to run:
+        python scrub_koa_rti.py --dev --utd 2021-02-11 --utd2 2021-02-12 --move --remove
+    """
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
 
@@ -448,9 +439,15 @@ if __name__ == '__main__':
         config_type = "DEV"
     else:
         config_type = "DEFAULT"
+        exit("ONLY READY FOR DEV MODE! use --dev")
 
     site = utils.get_config_param(config, config_type, 'site')
-    storage_root = utils.get_config_param(config, config_type, 'storage_root')
+    user = utils.get_config_param(config, config_type, 'user')
+    store_server = utils.get_config_param(config, config_type, 'store_server')
+    if config_type == "DEV":
+        storage_root = utils.get_config_param(config, config_type, 'storage_root_rti')
+    else:
+        storage_root = utils.get_config_param(config, config_type, 'storage_root')
 
     log_dir = utils.get_config_param(config, config_type, 'log_dir')
     log_name, log_stream = utils.create_logger('data_scrubber', log_dir)
@@ -465,25 +462,16 @@ if __name__ == '__main__':
     if args.move:
         metrics['n_moved'], metrics['n_movable'] = delete_obj.store_lev0_files()
         metrics['n_staged'], metrics['n_stagable'] = delete_obj.store_stage_files()
+        moved = delete_obj.get_num_moved()
+        metrics.update(moved)
     if args.remove:
         metrics['n_deleted'], metrics['n_deletable'] = delete_obj.delete_files()
 
     metrics['total_files'] = delete_obj.num_all_files()
 
-    # send a report of the scrub
-    now = datetime.now().strftime('%Y-%m-%d')
-    report = utils.create_report(metrics)
-    mailto = utils.get_config_param(config, 'email', 'admin')
-    utils.send_email(report, mailto, f'RTI Scrubber Report: {now}')
-
-    # if log_stream:
-    log_contents = log_stream.getvalue()
-    log_stream.close()
-
-    if log_contents:
-        mailto = utils.get_config_param(config, 'email', 'warnings')
-        utils.send_email(log_contents, mailto, f'RTI Scrubber Warnings: {now}')
-
+    report = utils.create_rti_report(metrics)
+    log.info(report)
+    utils.write_emails(config, log_stream, report, 'RTI')
 
 
 
