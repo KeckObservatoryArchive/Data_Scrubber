@@ -403,7 +403,9 @@ def count_koa(files_path, log):
     Count the files to be moved.  These are the local KOA files.
 
     :param files_path: <str> the path to the KOA (DEP) files.
-    :return:
+    :param log: <class 'logging.Logger'> the log
+
+    :return: <int> the number of files found at files_path
     """
     n_koa = 0
     for _, _, files in os.walk(files_path):
@@ -422,6 +424,8 @@ def count_store(user, store_server, store_path, utd, log):
     :param store_server:
     :param store_path: <str> the path to store the files.
     :param utd: <str> date YYYYMMDD
+    :param log: <class 'logging.Logger'> the log
+
     :return: the file count for the directory
     """
     n_store = 0

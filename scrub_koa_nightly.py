@@ -93,7 +93,7 @@ class StoreData:
                 if itr != len_funcs:
                     self.n_koa_after += utils.count_koa(files_path, log)
                     self.n_store_after += utils.count_store(user, store_server,
-                                                             store_path, utd, log)
+                                                            store_path, utd, log)
 
     @staticmethod
     def _rsync_files(files_path, store_path):
