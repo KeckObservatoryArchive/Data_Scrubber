@@ -287,7 +287,7 @@ class ChkArchive:
         add_query = 'AND OFNAME_DELETED=0'
         self.to_delete = self.file_list(args.utd, args.utd2, add_query)
 
-        add_query = "AND ARCHIVE_DIR IS NULL OR ARCHIVE_DIR = ''"
+        add_query = "AND ARCHIVE_DIR IS NULL"
         self.to_move = self.file_list(args.utd, args.utd2, add_query)
 
     def get_files_to_delete(self):
