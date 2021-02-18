@@ -49,7 +49,7 @@ def send_email(email_msg, mailto, subject):
 
 
 def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
-                  utd=None, utd2=None, update_val=None, add=None):
+                  utd=None, utd2=None, update_val=None, add=None, log=None):
     """
     Query the API to get or update information in the KOA RTI DB.
 
@@ -75,10 +75,11 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
         if dict_val and dict_key not in ['url', 'qtype', 'type_val']:
             url += f"&{dict_key}={dict_val}"
 
-    print("URL", url)
-
     response = requests.get(url)
     results = response.content
+
+    if log:
+        log.info(f'API URL: {url}')
 
     return results
 
@@ -221,7 +222,7 @@ def parse_args():
     parser.add_argument("--logdir", type=str, default='log',
                         help="Define the directory for the log.")
     parser.add_argument("--utd", type=str,
-                        default=(now - timedelta(days=21)).strftime('%Y-%m-%d'),
+                        default=(now - timedelta(days=16)).strftime('%Y-%m-%d'),
                         help="Start date to process YYYY-MM-DD.")
     parser.add_argument("--utd2", type=str,
                         default=(now - timedelta(days=14)).strftime('%Y-%m-%d'),

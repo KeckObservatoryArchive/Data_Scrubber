@@ -161,7 +161,8 @@ class ToDelete:
 
         :param koaid: <str> koaid of file to mark as deleted
         """
-        results = utils.query_rti_api(site, 'update', 'MARKDELETED', val=koaid)
+        results = utils.query_rti_api(site, 'update', 'MARKDELETED',
+                                      log=log, val=koaid)
         self._log_update(koaid, results, 'OFNAME_DELETED')
 
     # TODO only logs the command - update not being performed (change on API)
@@ -172,7 +173,7 @@ class ToDelete:
         :param koaid: <str> the koaid
         :param archive_path: <str> storage path where files were moved/archived.
         """
-        results = utils.query_rti_api(site, 'update', 'GENERAL',
+        results = utils.query_rti_api(site, 'update', 'GENERAL', log=log,
                                       columns='archive_dir',
                                       update_val=archive_path, val=koaid)
         self._log_update(koaid, results, 'ARCHIVE_DIR')
@@ -319,7 +320,7 @@ class ChkArchive:
         key = 'OFNAME_DELETED'
         val = '0'
         try:
-            results = utils.query_rti_api(site, 'search', 'GENERAL',
+            results = utils.query_rti_api(site, 'search', 'GENERAL', log=log,
                                           columns=columns, key=key, val=val,
                                           utd=utd, utd2=utd2)
             archived_results = json.loads(results)
@@ -343,7 +344,7 @@ class ChkArchive:
         key = 'status'
         val = self.archived_key
         try:
-            results = utils.query_rti_api(site, 'search', 'GENERAL',
+            results = utils.query_rti_api(site, 'search', 'GENERAL', log=log,
                                           columns=columns, key=key, val=val,
                                           add=add, utd=utd, utd2=utd2)
             archived_results = json.loads(results)
