@@ -107,10 +107,16 @@ class StoreData:
         else:
             rsync_cmd = ["rsync", "--remove-source-files", "-avz", "-e", "ssh",
                          files_path, f'{user}@{store_server}:{store_path}']
+            cln_cmd = ['find', files_path, '-depth', '-type', 'd', '-empty',
+                       '-exec', 'rmdir', '{}', ';']
+
 
         try:
             log.info(f"rsync cmd: {rsync_cmd}")
             # subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
+            if cln_cmd:
+                log.info(f"cleaning directories: {cln_cmd}")
+                # subprocess.run(cln_cmd, stdout=subprocess.DEVNULL, check=True)
         except subprocess.CalledProcessError:
             log.warning(f"Move failed: {rsync_cmd}")
             return 1
