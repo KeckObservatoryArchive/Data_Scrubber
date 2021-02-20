@@ -101,7 +101,7 @@ class StoreData:
         :param files_path: <str> the archive path or the DEP files.
         :param store_path: <str> the path to store the files.
         """
-        if config_type == "DEFAULT":
+        if config_type == "DEV":
             rsync_cmd = ["rsync", "-avz", "-e", "ssh", files_path,
                          f'{user}@{store_server}:{store_path}']
         else:
