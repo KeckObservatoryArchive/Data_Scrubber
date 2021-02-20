@@ -115,10 +115,10 @@ class StoreData:
 
         try:
             log.info(f"rsync cmd: {rsync_cmd}")
-            # subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
+            subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
             if cln_cmd:
                 log.info(f"cleaning directories: {cln_cmd}")
-                # subprocess.run(cln_cmd, stdout=subprocess.DEVNULL, check=True)
+                subprocess.run(cln_cmd, stdout=subprocess.DEVNULL, check=True)
         except subprocess.CalledProcessError:
             log.warning(f"Move failed: {rsync_cmd}")
             return 1
