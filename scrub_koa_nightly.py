@@ -104,7 +104,7 @@ class StoreData:
         :return: <int> 0 on success, 1 == not moved
         """
         if not utils.chk_file_exists(files_path):
-            log_str = f'skipping file {files_path} -- it has already been moved'
+            log_str = f'skipping file {files_path} -- already moved'
             log_str += ' or does not exist.'
             log.info(log_str)
             return 1
