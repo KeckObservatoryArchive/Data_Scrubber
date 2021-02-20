@@ -100,7 +100,15 @@ class StoreData:
 
         :param files_path: <str> the archive path or the DEP files.
         :param store_path: <str> the path to store the files.
+
+        :return: <int> 0 on success, 1 == not moved
         """
+        if not utils.chk_file_exists(files_path):
+            log_str = f'skipping file {files_path} -- it has already been moved'
+            log_str += ' or does not exist.'
+            log.info(log_str)
+            return 1
+
         cln_cmd = None
         if config_type == "DEV":
             rsync_cmd = ["rsync", "-avz", "-e", "ssh", files_path,
@@ -111,7 +119,6 @@ class StoreData:
             if '.log' not in files_path:
                 cln_cmd = ['find', files_path, '-depth', '-type', 'd',
                            '-empty', '-exec', 'rmdir', '{}', ';']
-
 
         try:
             log.info(f"rsync cmd: {rsync_cmd}")
