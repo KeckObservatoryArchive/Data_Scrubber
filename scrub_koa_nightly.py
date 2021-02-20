@@ -107,8 +107,9 @@ class StoreData:
         else:
             rsync_cmd = ["rsync", "--remove-source-files", "-avz", "-e", "ssh",
                          files_path, f'{user}@{store_server}:{store_path}']
-            cln_cmd = ['find', files_path, '-depth', '-type', 'd', '-empty',
-                       '-exec', 'rmdir', '{}', ';']
+            if '.log' not in files_path:
+                cln_cmd = ['find', files_path, '-depth', '-type', 'd',
+                           '-empty', '-exec', 'rmdir', '{}', ';']
 
 
         try:
