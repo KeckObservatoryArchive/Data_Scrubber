@@ -2,9 +2,7 @@ import argparse
 import configparser
 import logging
 import subprocess
-# from os import path, walk
 from os import path
-from sys import exit
 from datetime import datetime, timedelta
 import scrubber_utils as utils
 
@@ -192,7 +190,6 @@ if __name__ == '__main__':
         config_type = "DEV"
     else:
         config_type = "DEFAULT"
-        exit("ONLY READY FOR DEV MODE! use --dev")
 
     site = utils.get_config_param(config, config_type, 'site')
     user = utils.get_config_param(config, config_type, 'user')
