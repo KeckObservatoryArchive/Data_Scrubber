@@ -3,6 +3,7 @@ import argparse
 import logging
 import os
 import sys
+from glob import glob
 
 import subprocess
 from collections import namedtuple
@@ -72,7 +73,7 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
     url = f"{url}?{qtype}={type_val}"
 
     for dict_key, dict_val in loc.items():
-        if dict_val and dict_key not in ['url', 'qtype', 'type_val']:
+        if dict_val and dict_key not in ['url', 'qtype', 'type_val', 'log']:
             url += f"&{dict_key}={dict_val}"
 
     response = requests.get(url)
@@ -84,7 +85,7 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
     return results
 
 
-def create_rti_report(metrics):
+def create_rti_report(metrics, utd, utd2):
     """
     Form the report to be emailed at the end of a scrub run.
 
@@ -92,23 +93,38 @@ def create_rti_report(metrics):
     :return: <str> the report.
     """
 
-    report = f"\nResults from deleting OFNAME and moving lev0/stage to storage."
+    report = f"\nRTI Data Scrubber Results {utd} to {utd2}."
+
     if 'n_deleted' in metrics:
-        report = f"\n\n{metrics['n_deleted']} : Files deleted."
-        report += f"\n{metrics['n_deletable']} : Files found."
+        report += "\n\n-- Files on Instrument servers. --"
+        report += f"\n{metrics['n_deletable']} : OFNAME Files found."
+        report += f"\n{metrics['n_deleted']} : OFNAME Files deleted."
+
     if 'n_moved' in metrics:
-        report += f"\n\n{metrics['n_moved']} : lev0/ files moved."
-        report += f"\n{metrics['n_movable']} : lev0/ files found."
+        report += "\n\n-- DEP Files by KOAID on vm-koarti --"
+        report += f"\n{metrics['n_movable']} : unique KOAID found."
+        report += f"\n{metrics['n_moved']} : unique KOAID moved."
+        report += f"\n{metrics['koaid_file_cnt']} : Total KOA DEP files "
+        report += "matching KOAIDs found."
+
     if 'n_staged' in metrics:
-        report += f"\n\n{metrics['n_staged']} : Stage files moved."
+        report += "\n\n-- Fits Files created by DEP on vm-koarti --"
         report += f"\n{metrics['n_stagable']} : Stage files found."
-    if 'koa_before' in metrics:
-        report += f"\n\n{metrics['koa_before']} : Total KOA files BEFORE."
+        report += f"\n{metrics['n_staged']} : Stage files moved."
+
+    if 'store_before' in metrics:
+        report += "\n\n-- Files on storageserver (DEP and Stage files) --"
         report += f"\n{metrics['store_before']} : Total Storage files BEFORE."
-        report += f"\n{metrics['koa_after']} : Total KOA files AFTER."
         report += f"\n{metrics['store_after']} : Total Storage files AFTER."
 
-    report += f"\n\nTotal number of files not previously deleted (any status): "
+        total_mv = metrics['n_moved'] + metrics['koaid_file_cnt']
+        store_diff = metrics['store_after'] - metrics['store_before']
+
+        report += "\n\n-- Totals --"
+        report += f"\n{store_diff} : Total Storage difference."
+        report += f"\n{store_diff} : Total Stage + KOA files moved."
+
+    report += f"\n\nTotal number of KOAIDs not previously deleted (any status): "
     report += f"{metrics['total_files']}"
 
     return report
@@ -400,7 +416,8 @@ def make_storage_dir(storage_dir, storage_root, log):
 
 def count_koa(files_path, log):
     """
-    Count the files to be moved.  These are the local KOA files.
+    Count the files to be moved (descend into sub-directories).
+    These are the local KOA files.
 
     :param files_path: <str> the path to the KOA (DEP) files.
     :param log: <class 'logging.Logger'> the log
@@ -460,3 +477,12 @@ def dir_exists(user, store_server, store_path, utd):
 
     return int(subprocess.check_output(cmd).decode('utf-8'))
 
+
+def count_files(path_str):
+    """
+    Count the files in directory with a wildcard.
+
+    :param path_str: <str> the path + pattern to match
+    :return: <int> the number of files matching search criteria
+    """
+    return len(glob(path_str))

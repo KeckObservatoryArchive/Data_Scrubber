@@ -14,14 +14,13 @@ class ToDelete:
         self.utd = args.utd
         self.utd2 = args.utd2
         self.log = logging.getLogger(log_name)
-        self.database_obj = ChkArchive()
+        self.db_obj = ChkArchive()
+        self.to_delete = self.db_obj.get_files_to_delete()
+        self.to_move = self.db_obj.get_files_to_move()
         self.dirs_made = []
-        self.to_delete = self.database_obj.get_files_to_delete()
-        self.to_move = self.database_obj.get_files_to_move()
-        self.n_koa_before = 0
         self.n_store_before = 0
-        self.n_koa_after = 0
         self.n_store_after = 0
+        self.koaid_file_cnt = 0
 
     def num_all_files(self):
         """
@@ -30,13 +29,12 @@ class ToDelete:
 
         :return: <int> number of files in the data range
         """
-        return self.database_obj.num_all_files(self.utd, self.utd2)
+        return self.db_obj.num_all_files(self.utd, self.utd2)
 
     def get_num_moved(self):
-        num_files = {'store_before': self.n_store_before,
-                     'store_after': self.n_store_after,
-                     'koa_before': self.n_koa_before,
-                     'koa_after': self.n_koa_after}
+        num_files = {'koaid_file_cnt': self.koaid_file_cnt,
+                     'store_before': self.n_store_before,
+                     'store_after': self.n_store_after}
 
         return num_files
 
@@ -47,7 +45,7 @@ class ToDelete:
 
         :return: <(int, int)> number deleted, number found to delete.
         """
-        return self.delete_mv_list(self.to_delete, self.delete_func)
+        return self.del_mv(self.to_delete, self.delete_func)
 
     def store_stage_files(self):
         """
@@ -55,17 +53,18 @@ class ToDelete:
 
         :return: <(int, int)> number moved, number found matching move criteria.
         """
-        return self.delete_mv_list(self.to_move, self.store_stage_func)
+        return self.del_mv(self.to_move, self.store_stage_func)
 
     def store_lev0_files(self):
         """
-        Move the DEP files to storage.
+        Move the KOA DEP files to storage.
 
         :return: <(int, int)> number moved, number found matching move criteria.
         """
-        return self.delete_mv_list(self.to_move, self.store_lev0_func)
+        return self.del_mv(self.to_move, self.store_lev0_func)
 
-    def delete_mv_list(self, file_list, func):
+    @staticmethod
+    def del_mv(file_list, func):
         """
         Skeleton function to delete or move a file list,  file by file.
 
@@ -89,6 +88,7 @@ class ToDelete:
         """
         full_filename = result['ofname']
         try:
+            #TODO this needs to remove on the remote instrument servers
             self.log.info(f"os.remove {full_filename}")
         except OSError as error:
             self.log.warning(f"Error while removing: {full_filename}, {error}")
@@ -100,7 +100,8 @@ class ToDelete:
 
     def store_stage_func(self, result):
         """
-        move the stage file to storage.
+        move the stage file to storage.  The 'stage_file' path/filename to
+        move is stored in the db record['stage_file']
 
         :param result: <dict> single db row,  the query result for the file.
         :return: <int> 1 if file removed successfully,  or 1
@@ -209,16 +210,16 @@ class ToDelete:
         # "rsync --remove-source-files -av -e ssh koaadmin@"$server":"$dir"
         #               "$storageDir[$i]"
 
-        self.n_koa_before += utils.count_koa(mv_path, log)
         self.n_store_before += utils.count_store(user, store_server, '',
                                                  storage_dir, log)
 
-        server_str = f"{mv_path}/"
+        server_str = f"{mv_path}"
         store_loc = f'{user}@{store_server}:{storage_dir}'
         if koaid:
+            self.koaid_file_cnt += utils.count_files(f'{server_str}/{koaid}*')
             rsync_cmd = ["rsync", "-avz", "-e", "ssh",
                          "--include", f"{koaid}*",
-                         "--exclude", "*", server_str, store_loc]
+                         "--exclude", "*", f"{server_str}/", store_loc]
         else:
             rsync_cmd = ["rsync", "-avz", server_str, store_loc]
 
@@ -227,10 +228,9 @@ class ToDelete:
         try:
             subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
         except subprocess.CalledProcessError:
-            log.warning(f"File(s) {mv_path} not moved to storage")
+            log.warning(f"File(s) {mv_path} not moved to storage - {rsync_cmd}")
             return 0
 
-        self.n_koa_after += utils.count_koa(mv_path, log)
         self.n_store_after += utils.count_store(user, store_server, '',
                                                 storage_dir, log)
 
@@ -256,6 +256,7 @@ class ToDelete:
         koa_root = utils.get_config_param(config, 'koa_disk', 'path_root')
 
         storage_path = f"{storage_root}{store_num}/{inst}/"
+
         # storing stage files
         if ofname:
             dirs = ofname.split('/')
@@ -330,8 +331,8 @@ class ChkArchive:
 
     def file_list(self, utd, utd2, add):
         """
-        Query the database for the files to delete.  Verify the results are
-        valid
+        Query the database for the files to delete or move.  Verify
+        the results are valid
 
         :param utd: <str> YYYY-MM-DD initial date
         :param utd2: <str> YYYY-MM-DD the final date,  if None,  only one day
@@ -348,8 +349,8 @@ class ChkArchive:
                                           columns=columns, key=key, val=val,
                                           add=add, utd=utd, utd2=utd2)
             archived_results = json.loads(results)
-        except:
-            self.log.info("NO RESULTS")
+        except Exception as err:
+            self.log.info(f"NO RESULTS from query,  error: {err}")
             return None
 
         if utils.get_key_val(archived_results, 'success') == 1:
@@ -371,10 +372,10 @@ class ChkArchive:
             return None
 
         for idx, result in enumerate(data):
-            valid, err_msg = self._verify_result(result)
-            if not valid:
-                self.log.warning(f"REMOVING FROM DELETE LIST,  {err_msg}")
-                self.log.warning(f"{result}")
+            err_msg = self._verify_result(result)
+            if err_msg:
+                self.log.warning(f"{err_msg}, REMOVED FROM DELETE LIST.")
+                self.log.info(f"{result}")
                 data.pop(idx)
 
         return data
@@ -395,15 +396,15 @@ class ChkArchive:
 
         if (not koaid or not status or not ofname or not process_dir
                 or not stage_file):
-            return False, "INCOMPLETE RESULTS"
+            return "INCOMPLETE RESULTS"
         elif status != self.archived_key:
-            return False, "INVALID STATUS"
+            return "INVALID STATUS"
         elif status_code:
-            return False, f"STATUS CODE: {status_code}"
+            return f"STATUS CODE: {status_code}"
         elif process_dir.split('/')[-1] != 'lev0':
-            return False, "INVALID ARCHIVE DIR"
+            return "INVALID ARCHIVE DIR"
 
-        return True, ""
+        return None
 
     def chk_stage_exists(self, data):
         """
@@ -418,8 +419,9 @@ class ChkArchive:
         for idx, result in enumerate(data):
             file_location = utils.get_key_val(result, 'stage_file')
             if not utils.chk_file_exists(file_location):
-                self.log.warning(f"REMOVING FROM DELETE LIST, ")
-                self.log.warning(f"STAGE FILE (copy of original) NOT FOUND: {result}")
+                warn_str = f"STAGE FILE NOT FOUND {file_location}"
+                self.log.warning(warn_str)
+                self.log.info(f"REMOVED FROM DELETE LIST: {result}")
                 data.pop(idx)
 
         return data
@@ -451,7 +453,7 @@ if __name__ == '__main__':
         storage_root = utils.get_config_param(config, config_type, 'storage_root')
 
     log_dir = utils.get_config_param(config, config_type, 'log_dir')
-    log_name, log_stream = utils.create_logger('data_scrubber', log_dir)
+    log_name, log_stream = utils.create_logger('rti_scrubber', log_dir)
     log = logging.getLogger(log_name)
 
     log.info(f"Scrubbing data in UT range: {args.utd} to {args.utd2}")
@@ -470,7 +472,7 @@ if __name__ == '__main__':
 
     metrics['total_files'] = delete_obj.num_all_files()
 
-    report = utils.create_rti_report(metrics)
+    report = utils.create_rti_report(metrics, args.utd, args.utd2)
     log.info(report)
     utils.write_emails(config, log_stream, report, 'RTI')
 

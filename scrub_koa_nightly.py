@@ -103,12 +103,16 @@ class StoreData:
         :param files_path: <str> the archive path or the DEP files.
         :param store_path: <str> the path to store the files.
         """
-        rsync_cmd = ["rsync", "-avz", "-e", "ssh", files_path,
-                     f'{user}@{store_server}:{store_path}']
+        if config_type == "DEFAULT":
+            rsync_cmd = ["rsync", "-avz", "-e", "ssh", files_path,
+                         f'{user}@{store_server}:{store_path}']
+        else:
+            rsync_cmd = ["rsync", "--remove-source-files", "-avz", "-e", "ssh",
+                         files_path, f'{user}@{store_server}:{store_path}']
 
         try:
             log.info(f"rsync cmd: {rsync_cmd}")
-            subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
+            # subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
         except subprocess.CalledProcessError:
             log.warning(f"Move failed: {rsync_cmd}")
             return 1
