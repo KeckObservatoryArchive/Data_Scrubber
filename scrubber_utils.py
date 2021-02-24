@@ -85,7 +85,7 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
     return results
 
 
-def create_rti_report(metrics, utd, utd2):
+def create_rti_report(args, metrics):
     """
     Form the report to be emailed at the end of a scrub run.
 
@@ -93,42 +93,53 @@ def create_rti_report(metrics, utd, utd2):
     :return: <str> the report.
     """
 
-    report = f"\nRTI Data Scrubber Results {utd} to {utd2}."
+    report = f"\nRTI Data Scrubber Results {args.utd} to {args.utd2}."
 
-    if 'n_deleted' in metrics:
-        report += "\n\n-- Files on Instrument servers. --"
-        report += f"\n{metrics['n_deletable']} : OFNAME Files found."
-        report += f"\n{metrics['n_deleted']} : OFNAME Files deleted."
+    header = "Number of results"
+    report += f"\n\n{header}" + "\n" + "-" * len(header)
+    report += f"\n{metrics['nresults'][0]} : number of results."
+    report += f"\n{metrics['nresults'][1]} : number of verified results."
+    diff = metrics['nresults'][0] - metrics['nresults'][1]
+    if diff > 0:
+        report += f"\nErrors: {str(metrics['warnings']).strip(']').strip('[')}"
 
-    if 'n_moved' in metrics:
-        report += "\n\n-- DEP Files by KOAID on vm-koarti --"
-        report += f"\n{metrics['n_movable']} : unique KOAID found."
-        report += f"\n{metrics['n_moved']} : unique KOAID moved."
-        report += f"\n{metrics['koaid_file_cnt']} : Total KOA DEP files "
+    if args.remove:
+        header = "Files on Instrument servers"
+        report += f"\n\n{header}" + "\n" + "-" * len(header)
+        report += f"\n{metrics['sdata'][0]} : OFNAME Files found."
+        report += f"\n{metrics['sdata'][1]} : OFNAME Files deleted."
+
+    if args.move:
+        header = "DEP Files by KOAID on vm-koarti"
+        report += f"\n\n{header}" + "\n" + "-" * len(header)
+        report += f"\n{metrics['koaid'][0]} : unique KOAID found."
+        # report += f"\n{metrics['koaid'][1]} : unique KOAID moved."
+        report += f"\n{metrics['lev0'][0]} : Total KOA DEP files "
         report += "matching KOAIDs found."
+        report += f"\n{metrics['lev0'][1]} : Total KOA DEP files AFTER"
 
-    if 'n_staged' in metrics:
-        report += "\n\n-- Fits Files created by DEP on vm-koarti --"
-        report += f"\n{metrics['n_stagable']} : Stage files found."
-        report += f"\n{metrics['n_staged']} : Stage files moved."
+        header = "Fits Files created by DEP on vm-koarti"
+        report += f"\n\n{header}" + "\n" + "-" * len(header)
+        report += f"\n{metrics['staged'][0]} : Stage files found."
+        report += f"\n{metrics['staged'][1]} : Stage files moved."
 
-    if 'store_before' in metrics:
-        report += "\n\n-- Files on storageserver (DEP and Stage files) --"
-        report += f"\n{metrics['store_before']} : Total Storage files BEFORE."
-        report += f"\n{metrics['store_after']} : Total Storage files AFTER."
+    header = "Files on storageserver (DEP and Stage files)"
+    report += f"\n\n{header}" + "\n" + "-" * len(header)
+    report += f"\n{metrics['storage'][0]} : Total Storage files BEFORE."
+    report += f"\n{metrics['storage'][1]} : Total Storage files AFTER."
 
-        total_mv = metrics['n_moved'] + metrics['koaid_file_cnt']
-        store_diff = metrics['store_after'] - metrics['store_before']
+    total_mv = metrics['lev0'][1] + metrics['lev0'][0] + metrics['staged'][1]
+    store_diff = metrics['storage'][1] - metrics['storage'][0]
 
-        report += "\n\n-- Totals --"
-        report += f"\n{store_diff} : Total Storage difference."
-        report += f"\n{store_diff} : Total Stage + KOA files moved."
+    header = "Totals"
+    report += f"\n\n{header}" + "\n" + "-" * len(header)
+    report += f"\n{store_diff} : Total Storage difference."
+    report += f"\n{total_mv} : Total Stage + KOA files moved."
 
     report += f"\n\nTotal number of KOAIDs not previously deleted (any status): "
     report += f"{metrics['total_files']}"
 
     return report
-
 
 def create_nightly_report(metrics, utd, utd2):
     """
@@ -238,10 +249,10 @@ def parse_args():
     parser.add_argument("--logdir", type=str, default='log',
                         help="Define the directory for the log.")
     parser.add_argument("--utd", type=str,
-                        default=(now - timedelta(days=16)).strftime('%Y-%m-%d'),
+                        default=(now - timedelta(days=14)).strftime('%Y-%m-%d'),
                         help="Start date to process YYYY-MM-DD.")
     parser.add_argument("--utd2", type=str,
-                        default=(now - timedelta(days=14)).strftime('%Y-%m-%d'),
+                        default=(now - timedelta(days=7)).strftime('%Y-%m-%d'),
                         help="End date to process YYYY-MM-DD.")
     parser.add_argument("--include_inst", type=str,
                         default=None,
