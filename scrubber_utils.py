@@ -95,13 +95,20 @@ def create_rti_report(args, metrics):
 
     report = f"\nRTI Data Scrubber Results {args.utd} to {args.utd2}."
 
+    header = "Totals"
+    report += f"\n\n{header}" + "\n" + "-" * len(header)
+    report += f"\n{metrics['total_koa_mv']} : Total KOA files moved."
+    report += f"\n{metrics['total_storage_mv']} : Total Storage difference."
+
     header = "Number of results"
     report += f"\n\n{header}" + "\n" + "-" * len(header)
-    report += f"\n{metrics['nresults'][0]} : number of results."
+    report += f"\n{metrics['nresults'][0]} : number of KOAID in results."
     report += f"\n{metrics['nresults'][1]} : number of verified results."
     diff = metrics['nresults'][0] - metrics['nresults'][1]
     if diff > 0:
-        report += f"\nErrors: {str(metrics['warnings']).strip(']').strip('[')}"
+        report += f"\n\nErrors: "
+        for err in metrics['warnings']:
+            report += f"\n    {err}"
 
     if args.remove:
         header = "Files on Instrument servers"
@@ -110,31 +117,10 @@ def create_rti_report(args, metrics):
         report += f"\n{metrics['sdata'][1]} : OFNAME Files deleted."
 
     if args.move:
-        header = "DEP Files by KOAID on vm-koarti"
-        report += f"\n\n{header}" + "\n" + "-" * len(header)
-        report += f"\n{metrics['koaid'][0]} : unique KOAID found."
-        # report += f"\n{metrics['koaid'][1]} : unique KOAID moved."
-        report += f"\n{metrics['lev0'][0]} : Total KOA DEP files "
-        report += "matching KOAIDs found."
-        report += f"\n{metrics['lev0'][1]} : Total KOA DEP files AFTER"
-
         header = "Fits Files created by DEP on vm-koarti"
         report += f"\n\n{header}" + "\n" + "-" * len(header)
         report += f"\n{metrics['staged'][0]} : Stage files found."
         report += f"\n{metrics['staged'][1]} : Stage files moved."
-
-    header = "Files on storageserver (DEP and Stage files)"
-    report += f"\n\n{header}" + "\n" + "-" * len(header)
-    report += f"\n{metrics['storage'][0]} : Total Storage files BEFORE."
-    report += f"\n{metrics['storage'][1]} : Total Storage files AFTER."
-
-    total_mv = metrics['lev0'][1] + metrics['lev0'][0] + metrics['staged'][1]
-    store_diff = metrics['storage'][1] - metrics['storage'][0]
-
-    header = "Totals"
-    report += f"\n\n{header}" + "\n" + "-" * len(header)
-    report += f"\n{store_diff} : Total Storage difference."
-    report += f"\n{total_mv} : Total Stage + KOA files moved."
 
     report += f"\n\nTotal number of KOAIDs not previously deleted (any status): "
     report += f"{metrics['total_files']}"
@@ -162,6 +148,27 @@ def create_nightly_report(metrics, utd, utd2):
     report += f"\n{diff_mv} : Number of files moved to storage.\n"
 
     return report
+
+
+def clean_empty_dirs(root_dir, log):
+    """
+    Remove any empty directories below the root_dir
+
+    :param root_dir: <str>
+    :param log:
+    :return:
+    """
+    cln_cmd = ['find', root_dir, '-depth', '-type', 'd', '-empty',
+               '-exec', 'rmdir', '{}', ';']
+
+    log.info(f"Cleaning directories at {root_dir}")
+
+    try:
+        subprocess.run(cln_cmd, stdout=subprocess.DEVNULL, check=True)
+    except subprocess.CalledProcessError:
+        log.warning(f"Error removing empty directories in: {root_dir}")
+        log.info(f"Failed clean command {cln_cmd}")
+        return 0
 
 
 def write_emails(config, log_stream, report, prefix=''):
@@ -460,9 +467,11 @@ def count_store(user, store_server, store_path, utd, log):
     cmd = ['ssh', f'{user}@{store_server}', 'find',
            f'{store_path}/{utd}/', '-type', 'f', '|', 'wc', '-l']
 
+    # try:
+    #     if dir_exists(user, store_server, store_path, utd) == 0:
+    #         return 0
+
     try:
-        if dir_exists(user, store_server, store_path, utd) == 0:
-            return 0
         n_store = int(subprocess.check_output(cmd).decode('utf-8'))
     except Exception as err:
         log.warning(f'Error: {err}')
@@ -471,6 +480,18 @@ def count_store(user, store_server, store_path, utd, log):
     log.info(f"{n_store} : files at {store_server}:{store_path}/{utd}")
 
     return n_store
+
+
+def diff_list(list1, list2):
+    """
+    Determine the different elements between two lists
+
+    :param list1: <list> list one
+    :param list2: <list> list two
+
+    :return: <list> a list of the different elements between the two lists.
+    """
+    return [i for i in list1 + list2 if i not in list1 or i not in list2]
 
 
 def dir_exists(user, store_server, store_path, utd):
@@ -497,3 +518,24 @@ def count_files(path_str):
     :return: <int> the number of files matching search criteria
     """
     return len(glob(path_str))
+
+def count_koa_files(args):
+    '/koadata/NIRES/20210223/lev0/'
+    '/koadata/NIRES/stage/20210223 // s / sdata1500 / nires9 / 2021feb23 // s210223_0002.fits'
+    utd2 = int(args.utd2.replace('-', ''))
+    diff = utd2 - int(args.utd.replace('-', ''))
+
+    sfiles = 0
+    ofiles = 0
+    for i in range(0, diff + 1):
+        utd = utd2 - i
+
+        sfiles = [rslt for rslt in
+                  glob(f'/koadata/*/stage/{utd}/**', recursive=True)
+                  if not os.path.isdir(rslt)]
+
+        ofiles = [rslt for rslt in
+                  glob(f'/koadata/*/{utd}/**', recursive=True)
+                  if not os.path.isdir(rslt)]
+
+    return len(sfiles) + len(ofiles)
