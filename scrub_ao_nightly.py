@@ -157,7 +157,8 @@ if __name__ == '__main__':
 
     args = utils.parse_args()
 
-    log_name, log_stream = utils.create_logger('ao_nightly_dir', log_dir)
+    log_name, log_stream = utils.create_logger('ao_nightly_dir', log_dir,
+                                               args.tel)
     if not log_name:
         print("Error while starting logging,  could not create logger.")
 

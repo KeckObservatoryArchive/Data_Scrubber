@@ -78,7 +78,7 @@ def count_local(files_path, log):
     return cnt
 
 
-def create_logger(name, logdir):
+def create_logger(name, logdir, tel):
     """
     Set the logger for writing to a log file,  and capturing the
     warnings/errors to be sent in an email.
@@ -87,9 +87,9 @@ def create_logger(name, logdir):
     :return: <str> log_name (including date+time)
              <_io.StringIO> the log stream handler
     """
-    now = datetime.now().strftime('%Y%m%d_%H:%M:%S')
+    now = datetime.now().strftime('%Y%m')
     log_name = f'{name}_{now}'
-    log_fullpath = f'{logdir}/{log_name}.log'
+    log_fullpath = f'{logdir}/{log_name}_K{tel}.log'
 
     try:
         #Create logger object
