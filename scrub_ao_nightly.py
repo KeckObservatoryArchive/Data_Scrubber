@@ -1,5 +1,5 @@
 import logging
-from os import path
+from os import path, mkdir, rmdir
 from datetime import datetime, timedelta
 import scrub_ao_utils as utils
 
@@ -79,6 +79,15 @@ class ScrubAO:
             log.info(f"Path: {paths['summit']} has already been cleaned.")
             return 1
 
+        hq_month_path = paths['hq'].rsplit('/', 1)[0]
+        if not path.exists(hq_month_path):
+            try:
+                mkdir(hq_month_path)
+                log.info(f"Created the directory for the month {hq_month_path}")
+            except:
+                log.info(f"Error creating the directory for the month "
+                         f"{hq_month_path}")
+
         if remove:
             rsync_cmd = ["rsync", "--remove-source-files", "-avz",
                          paths['summit'], paths['hq']]
@@ -108,9 +117,16 @@ class ScrubAO:
         utils.run_cmd(cln_cmd, log)
 
         # clean the date directory,  otherwise above cmd gets permission denied.
-        cln_cmd = ['ssh', f'{self.ao_user}@{self.ao_server}',
-                   'rmdir', paths['summit']]
+        cln_cmd = ['ssh', f'{self.ao_user}@{self.ao_server}', 'rmdir',
+                   paths['summit']]
         utils.run_cmd(cln_cmd, log)
+
+        # clean the month directory if empty
+        summit_month_path = paths['summit'].rsplit('/', 1)[0]
+        try:
+            rmdir(summit_month_path)
+        except OSError:
+            pass
 
         return ret_val
 
