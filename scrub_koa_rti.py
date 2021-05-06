@@ -1,4 +1,5 @@
 import os
+import sys
 import configparser
 import logging
 import json
@@ -130,7 +131,8 @@ class ToDelete:
             #TODO this needs to remove on the remote instrument servers
             self.log.info(f"os.remove {full_filename}")
         except OSError as error:
-            self.log.warning(f"Error while removing: {full_filename}, {error}")
+            self.log.warning(f"Error while removing: {full_filename}, {error}, "
+                             f"line: {sys.exc_info()[-1].tb_lineno}")
             return 0
 
         # TODO this needs to be added once the files are being deleted
@@ -145,7 +147,7 @@ class ToDelete:
 
         :param koaid: <str> the koaid of files.
         :param mv_path: <str> the path to the files(s) to move
-        :param ofname: <str> ofname (dep_status table)
+        :param ofname: <str> ofname (koa_status table)
         :return: <str/list> storage directory (or None) and list of storage dirs
         """
         storage_dir = self.determine_storage(koaid, ofname)
@@ -163,7 +165,7 @@ class ToDelete:
 
     def mark_deleted(self, koaid):
         """
-        Add deleted to the dep_status (ofname_deleted) table for the
+        Add deleted to the koa_status (ofname_deleted) table for the
         given koaid.
 
         :param koaid: <str> koaid of file to mark as deleted
@@ -195,14 +197,15 @@ class ToDelete:
         """
         try:
             results = json.loads(results)
-        except:
-            self.log.warning(f"Could not set {column} for: {koaid}")
+        except Exception as err:
+            self.log.warning(f"Error: {err}, line: {sys.exc_info()[-1].tb_lineno}")
 
         if results and type(results) == dict and results['success'] == 1:
             self.log.info(f"{results['data']}")
             self.log.info(f"{column} set for koaid: {koaid}")
         else:
-            self.log.warning(f"{column} not set for: {koaid}")
+            self.log.warning(f"{column} not set for: {koaid}, "
+                             f"line: {sys.exc_info()[-1].tb_lineno}")
             return False
 
         return True
@@ -299,8 +302,7 @@ class ChkArchive:
         self.to_delete = []
 
         if args.remove:
-            self.to_delete = self.file_list(args.utd, args.utd2,
-                                            'AND OFNAME_DELETED=0')
+            self.to_delete = self.file_list(args.utd, args.utd2, "")
         if args.move:
             self.to_move = self.file_list(args.utd, args.utd2,
                                           "AND ARCHIVE_DIR IS NULL")
@@ -360,7 +362,7 @@ class ChkArchive:
         :return: <dict> the verified data results from the query
         """
         columns = 'koaid,status,status_code,ofname,stage_file,'
-        columns += 'process_dir,archive_dir,ofname_deleted'
+        columns += 'process_dir,archive_dir'
         key = 'status'
         val = self.archived_key
         try:
@@ -494,6 +496,9 @@ if __name__ == '__main__':
     nfiles_after = utils.count_koa_files(args)
     store_after = utils.count_store(user, store_server,
                                     f'{storage_root}*', '*', log)
+
+    log.info(f'Number of KOA FILES before: {nfiles_before}')
+    log.info(f'Number of KOA FILES after: {nfiles_after}')
 
     metrics['total_koa_mv'] = nfiles_before - nfiles_after
     metrics['total_storage_mv'] = store_after - store_before

@@ -127,6 +127,7 @@ def create_rti_report(args, metrics):
 
     return report
 
+
 def create_nightly_report(metrics, utd, utd2):
     """
     Form the report to be emailed at the end of a scrub run.
@@ -166,7 +167,8 @@ def clean_empty_dirs(root_dir, log):
     try:
         subprocess.run(cln_cmd, stdout=subprocess.DEVNULL, check=True)
     except subprocess.CalledProcessError:
-        log.warning(f"Error removing empty directories in: {root_dir}")
+        log.warning(f"Error removing empty directories in: {root_dir}, "
+                    f"line: {sys.exc_info()[-1].tb_lineno}")
         log.info(f"Failed clean command {cln_cmd}")
         return 0
 
@@ -474,7 +476,7 @@ def count_store(user, store_server, store_path, utd, log):
     try:
         n_store = int(subprocess.check_output(cmd).decode('utf-8'))
     except Exception as err:
-        log.warning(f'Error: {err}')
+        log.warning(f'Error: {err} line: {sys.exc_info()[-1].tb_lineno}')
         log.warning(f'Could not count files for: {store_path}')
 
     log.info(f"{n_store} : files at {store_server}:{store_path}/{utd}")
@@ -518,6 +520,7 @@ def count_files(path_str):
     :return: <int> the number of files matching search criteria
     """
     return len(glob(path_str))
+
 
 def count_koa_files(args):
     '/koadata/NIRES/20210223/lev0/'
