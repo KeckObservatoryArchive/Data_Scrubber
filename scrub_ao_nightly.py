@@ -79,7 +79,7 @@ class ScrubAO:
             log.info(f"Path: {paths['summit']} has already been cleaned.")
             return 1
 
-        hq_month_path = paths['hq'].rsplit('/', 1)[0]
+        hq_month_path = paths['hq_month']
         if not path.exists(hq_month_path):
             try:
                 mkdir(hq_month_path)
@@ -140,9 +140,11 @@ class ScrubAO:
         :return: <dict> the summit and HQ paths
         """
         utd_str = datetime.strftime(utd_datetime, '%y/%m/%d')
+        utd_month = datetime.strftime(utd_datetime, '%y/%m')
 
         paths = {'summit': f'/net/k{self.tel}aoserver/k{self.tel}aodata/nightly/{utd_str}/',
-                 'hq': f'/h/nightly{self.tel}/ao/{utd_str}/'}
+                 'hq': f'/h/nightly{self.tel}/ao/{utd_str}/',
+                 'hq_month': f'/h/nightly{self.tel}/ao/{utd_month}/'}
 
         return paths
 
