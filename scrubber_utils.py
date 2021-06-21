@@ -524,7 +524,7 @@ def count_files(path_str):
 
 def count_koa_files(args):
     '/koadata/NIRES/20210223/lev0/'
-    '/koadata/NIRES/stage/20210223 // s / sdata1500 / nires9 / 2021feb23 // s210223_0002.fits'
+    '/koadata/NIRES/stage/20210223/s/sdata1500/nires9/2021feb23/s210223_0002.fits'
     utd2 = int(args.utd2.replace('-', ''))
     diff = utd2 - int(args.utd.replace('-', ''))
 
@@ -533,12 +533,15 @@ def count_koa_files(args):
     for i in range(0, diff + 1):
         utd = utd2 - i
 
-        sfiles = [rslt for rslt in
-                  glob(f'/koadata/*/stage/{utd}/**', recursive=True)
-                  if not os.path.isdir(rslt)]
+        sfile_list = [rslt for rslt in
+                      glob(f'/koadata/*/stage/{utd}/**', recursive=True)
+                      if not os.path.isdir(rslt)]
 
-        ofiles = [rslt for rslt in
-                  glob(f'/koadata/*/{utd}/**', recursive=True)
-                  if not os.path.isdir(rslt)]
+        ofile_list = [rslt for rslt in
+                       glob(f'/koadata/*/{utd}/**', recursive=True)
+                       if not os.path.isdir(rslt)]
 
-    return len(sfiles) + len(ofiles)
+        sfiles += len(sfile_list)
+        ofiles += len(ofile_list)
+
+    return sfiles + ofiles
