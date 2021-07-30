@@ -95,7 +95,7 @@ class ToDelete:
             return 0
 
         return_val = self._rsync_files(mv_path, storage_dir, koaid)
-        # if return_val == 1:
+
         if not self.add_archived_dir(koaid, storage_dir):
             self.log.warning(f"archive_dir not set for {koaid}")
 
@@ -165,14 +165,14 @@ class ToDelete:
 
     def mark_deleted(self, koaid):
         """
-        Add deleted to the koa_status (ofname_deleted) table for the
+        Add deleted to the koa_status (source_deleted) table for the
         given koaid.
 
         :param koaid: <str> koaid of file to mark as deleted
         """
         results = utils.query_rti_api(site, 'update', 'MARKDELETED',
                                       log=log, val=koaid)
-        self._log_update(koaid, results, 'OFNAME_DELETED')
+        self._log_update(koaid, results, 'SOURCE_DELETED')
 
     def add_archived_dir(self, koaid, archive_path):
         """
@@ -182,8 +182,10 @@ class ToDelete:
         :param archive_path: <str> storage path where files were moved/archived.
         """
         self.log.info(f"setting archive_dir for: {koaid}")
+        archive_loc = utils.get_config_param(config, 'db_columns', 'archive_directory')
+
         results = utils.query_rti_api(site, 'update', 'GENERAL', log=log,
-                                      columns='archive_dir', key='koaid',
+                                      columns=archive_loc, key='koaid',
                                       update_val=archive_path, val=koaid)
         return self._log_update(koaid, results, 'ARCHIVE_DIR')
 
@@ -295,6 +297,8 @@ class ChkArchive:
     def __init__(self):
         self.log = logging.getLogger(log_name)
         self.archived_key = utils.get_config_param(config, 'archive', 'archived')
+        self.deleted_column = utils.get_config_param(config, 'db_columns', 'deleted')
+        self.status_col = utils.get_config_param(config, 'db_columns', 'status')
         self.nresults = [0, 0]
         self.uniq_warn = []
 
@@ -338,13 +342,10 @@ class ChkArchive:
         :param utd2: <str> UT date at end of range.
         :return: <int> the number of files in the archive between the two dates.
         """
-        columns = 'koaid'
-        key = 'OFNAME_DELETED'
-        val = '0'
         try:
             results = utils.query_rti_api(site, 'search', 'GENERAL', log=log,
-                                          columns=columns, key=key, val=val,
-                                          utd=utd, utd2=utd2)
+                                          key=self.deleted_column, val='0',
+                                          columns='koaid', utd=utd, utd2=utd2)
             archived_results = json.loads(results)
             return len(archived_results['data'])
         except:
@@ -361,10 +362,14 @@ class ChkArchive:
         :param add: <str> the tail of the query string.
         :return: <dict> the verified data results from the query
         """
-        columns = 'koaid,status,status_code,ofname,stage_file,'
-        columns += 'process_dir,archive_dir'
-        key = 'status'
+
+        # the columns to return
+        columns = utils.get_config_param(config, 'db_columns', 'relevant')
+
+        # the database search column / value
+        key = self.status_col
         val = self.archived_key
+
         try:
             results = utils.query_rti_api(site, 'search', 'GENERAL', log=log,
                                           columns=columns, key=key, val=val,
@@ -374,9 +379,9 @@ class ChkArchive:
             self.log.info(f"NO RESULTS from query,  error: {err}")
             return None
 
-        if utils.get_key_val(archived_results, 'success') == 1:
+        if archived_results.get('success') == 1:
             self.log.info('API Results = Success')
-            data = utils.get_key_val(archived_results, 'data')
+            data = archived_results.get('data')
 
             d_before = [dat['koaid'] for dat in data]
             self.nresults[0] = len(data)
@@ -403,10 +408,10 @@ class ChkArchive:
 
         filter_data = []
         for result in data:
-            self.log.info(f"Checking KOAID {result['koaid']}")
+            self.log.info(f"Checking results for KOAID: {result['koaid']}")
             err_msg = self._verify_result(result)
             if err_msg:
-                msg = f"koaid: {utils.get_key_val(result, 'koaid')} {err_msg}"
+                msg = f"KOAID: {result.get('koaid', '')} {err_msg}"
                 self.log.warning(f"{msg}, REMOVED FROM DELETE LIST.")
                 self.log.info(f"{result}")
                 continue
@@ -422,26 +427,25 @@ class ChkArchive:
         :param result: <dict> a single row from the db query
         :return: <bool, str> True if valid,  err_msg when invalid.
         """
-        koaid = utils.get_key_val(result, 'koaid')
-        status = utils.get_key_val(result, 'status')
-        status_code = utils.get_key_val(result, 'status_code')
-        ofname = utils.get_key_val(result, 'ofname')
-        stage_file = utils.get_key_val(result, 'stage_file')
-        process_dir = utils.get_key_val(result, 'process_dir')
+        if not result:
+            return "No results found from query."
 
+        column_str = utils.get_config_param(config, 'db_columns', 'verify')
+        columns = column_str.replace(' ', '').split(',')
         err = None
-        if (not koaid or not status or not ofname or not process_dir
-                or not stage_file):
-            err = "INCOMPLETE RESULTS"
-        elif status != self.archived_key:
-            err = "INVALID STATUS"
-        elif status_code:
-            err = f"STATUS CODE: {status_code}"
-        elif process_dir.split('/')[-1] != 'lev0':
-            err = "INVALID ARCHIVE DIR"
-        # elif not utils.chk_file_exists(stage_file):
-        #     err = f"STAGE FILE NOT FOUND"
-            # + {stage_file}
+        for col in columns:
+            if err:
+                break
+            val = result.get(col)
+
+            if not val and col != 'status_code':
+                err = "INCOMPLETE RESULTS"
+            elif col == 'status_code' and val and not result.get('reviewed'):
+                err = f"STATUS CODE: {val} AND REVIEWED: {result.get('reviewed')}"
+            elif col == 'status' and val != self.archived_key:
+                err = f"INVALID STATUS, STATUS must be = {self.archived_key}"
+            elif col == 'process_dir' and val.split('/')[-1] != 'lev0':
+                err = "INVALID ARCHIVE DIR"
 
         if err and err not in self.uniq_warn:
             self.uniq_warn.append(err)

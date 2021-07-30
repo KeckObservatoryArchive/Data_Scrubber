@@ -31,7 +31,7 @@ def chk_file_exists(file_location, filename=None):
     return os.path.exists(file_location)
 
 
-def send_email(email_msg, mailto, subject):
+def send_email(email_msg, mailto, subject, mailfrom='data_scrubber@keck.hawaii.edu'):
     """
     send an email if there are any warnings or errors logged.
 
@@ -39,7 +39,6 @@ def send_email(email_msg, mailto, subject):
     :param config: <class 'configparser.ConfigParser'> the config file parser.
     """
     import smtplib
-    mailfrom = 'data_scrubber@keck.hawaii.edu'
 
     msg = f"From: {mailfrom}\r\nTo: {mailto}\r\n"
     msg += f"Subject: {subject}\r\n\r\n{email_msg}"
@@ -184,7 +183,7 @@ def write_emails(config, log_stream, report, prefix=''):
     """
     now = datetime.now().strftime('%Y-%m-%d')
     mailto = get_config_param(config, 'email', 'admin')
-    send_email(report, mailto, f'{prefix} Scrubber Report: {now}')
+    send_email(report, mailto, f'{prefix} Scrubber Report: {now}', mailfrom=mailto)
 
     if log_stream:
         log_contents = log_stream.getvalue()
@@ -205,7 +204,8 @@ def create_logger(name, logdir):
     :return: <str> log_name (including date+time)
              <_io.StringIO> the log stream handler
     """
-    now = datetime.now().strftime('%Y%m%d_%H:%M:%S')
+    # now = datetime.now().strftime('%Y%m%d_%H:%M:%S')
+    now = datetime.now().strftime('%Y%m')
     log_name = f'{name}_{now}'
     log_fullpath = f'{logdir}/{log_name}.log'
     try:
@@ -258,10 +258,10 @@ def parse_args():
     parser.add_argument("--logdir", type=str, default='log',
                         help="Define the directory for the log.")
     parser.add_argument("--utd", type=str,
-                        default=(now - timedelta(days=14)).strftime('%Y-%m-%d'),
+                        default=(now - timedelta(days=28)).strftime('%Y-%m-%d'),
                         help="Start date to process YYYY-MM-DD.")
     parser.add_argument("--utd2", type=str,
-                        default=(now - timedelta(days=7)).strftime('%Y-%m-%d'),
+                        default=(now - timedelta(days=21)).strftime('%Y-%m-%d'),
                         help="End date to process YYYY-MM-DD.")
     parser.add_argument("--include_inst", type=str,
                         default=None,
@@ -271,6 +271,7 @@ def parse_args():
                         default=None,
                         help="comma separated list of instruments to exclude, "
                              "the default is to exclude no instruments.")
+
     return parser.parse_args()
 
 
