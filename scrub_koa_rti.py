@@ -19,6 +19,7 @@ class ToDelete:
         self.to_delete = self.db_obj.get_files_to_delete()
         self.to_move = self.db_obj.get_files_to_move()
         self.dirs_made = []
+        self.lev1_moved = []
         self.metrics = {'staged': [0, 0], 'sdata': [0, 0], 'koaid': [0, 0],
                         'nresults': self.db_obj.get_nresults(),
                         'warnings': self.db_obj.get_warnings()}
@@ -27,6 +28,9 @@ class ToDelete:
             self.rm = ""
         else:
             self.rm = "--remove-source-files"
+
+    def get_errors(self):
+        return self.db_obj.get_errors()
 
     def num_all_files(self):
         """
@@ -64,6 +68,15 @@ class ToDelete:
         """
         return self.del_mv(self.to_move, self.store_lev0_func)
 
+    def store_lev1_files(self):
+        """
+        Move the KOA DEP files to storage.
+
+        :return: <(int, int)> number moved, number found matching move criteria.
+        """
+        lev1_files = self.db_obj.get_files_to_move(lev1=True)
+        return self.del_mv(lev1_files, self.store_lev1_func)
+
     def del_mv(self, file_list, func):
         """
         Skeleton function to delete or move a file list,  file by file.
@@ -96,7 +109,35 @@ class ToDelete:
 
         return_val = self._rsync_files(mv_path, storage_dir, koaid)
 
-        if not self.add_archived_dir(koaid, storage_dir):
+        if not self.add_archived_dir(koaid, storage_dir, level=0):
+            self.log.warning(f"archive_dir not set for {koaid}")
+
+        return return_val
+
+    def store_lev1_func(self, result):
+        """
+        move the files matching koaid to storage.
+
+        :param result: <dict> single db row,  the query result for the file.
+        :return: <int> 1 if file removed successfully,  or 1
+        """
+        return_val = 0
+        koaid = result['koaid']
+        mv_path = result['process_dir']
+
+        if 'lev1' not in mv_path:
+            self.log.warning(f"lev1 path format is incorrect: {mv_path}")
+            return 0
+
+        storage_dir = self.get_storage_dir(koaid, mv_path, level=1)
+        if not storage_dir:
+            return 0
+
+        if mv_path not in self.lev1_moved:
+            return_val = self._rsync_files(mv_path, storage_dir)
+            self.lev1_moved.append(mv_path)
+
+        if not self.add_archived_dir(koaid, storage_dir, level=1):
             self.log.warning(f"archive_dir not set for {koaid}")
 
         return return_val
@@ -141,7 +182,7 @@ class ToDelete:
         # TODO update to 1 once it is removing data
         return 0
 
-    def get_storage_dir(self, koaid, mv_path, ofname=None):
+    def get_storage_dir(self, koaid, mv_path, ofname=None, level=0):
         """
         get storage location and make the directory if needed.
 
@@ -150,7 +191,7 @@ class ToDelete:
         :param ofname: <str> ofname (koa_status table)
         :return: <str/list> storage directory (or None) and list of storage dirs
         """
-        storage_dir = self.determine_storage(koaid, ofname)
+        storage_dir = self.determine_storage(koaid, ofname=ofname, level=level)
 
         if not storage_dir:
             self.log.warning("Could not determine storage path!")
@@ -174,7 +215,7 @@ class ToDelete:
                                       log=log, val=koaid)
         self._log_update(koaid, results, 'SOURCE_DELETED')
 
-    def add_archived_dir(self, koaid, archive_path):
+    def add_archived_dir(self, koaid, archive_path, level=0):
         """
         Add the path to the storage / archived files.
 
@@ -186,7 +227,8 @@ class ToDelete:
 
         results = utils.query_rti_api(site, 'update', 'GENERAL', log=log,
                                       columns=archive_loc, key='koaid',
-                                      update_val=archive_path, val=koaid)
+                                      update_val=archive_path, val=koaid,
+                                      add=f' LEVEL={level}')
         return self._log_update(koaid, results, 'ARCHIVE_DIR')
 
     def _log_update(self, koaid, results, column):
@@ -247,7 +289,7 @@ class ToDelete:
         return 1
 
     @staticmethod
-    def determine_storage(koaid, ofname=None):
+    def determine_storage(koaid, level=0, ofname=None):
         """
         Find the storage directory from the KOAID.
         # koadmin@storageserver:/koastorage04/DEIMOS/koadata39/
@@ -276,9 +318,9 @@ class ToDelete:
             s_root = '/'.join(dirs[:-1])
             storage_path += f"stage/{inst}/{utd}/{s_root}"
 
-        # storing lev0 files
+        # storing lev0 and lev1 files
         else:
-            storage_path += f"{koa_root}{koa_num}/{utd}/lev0/"
+            storage_path += f"{koa_root}{koa_num}/{utd}/lev{level}/"
 
         return storage_path
 
@@ -301,15 +343,23 @@ class ChkArchive:
         self.status_col = utils.get_config_param(config, 'db_columns', 'status')
         self.nresults = [0, 0]
         self.uniq_warn = []
+        self.errors_dict = {}
 
         self.to_move = []
         self.to_delete = []
+        self.move_lev1 = []
 
-        if args.remove:
+        if remove:
             self.to_delete = self.file_list(args.utd, args.utd2, "")
-        if args.move:
+        if move:
             self.to_move = self.file_list(args.utd, args.utd2,
-                                          "AND ARCHIVE_DIR IS NULL")
+                                          "ARCHIVE_DIR IS NULL")
+        if lev1:
+            self.move_lev1 = self.file_list(args.utd, args.utd2,
+                                            "ARCHIVE_DIR IS NULL", level=1)
+
+    def get_errors(self):
+        return self.errors_dict
 
     def get_nresults(self):
         return self.nresults
@@ -325,12 +375,15 @@ class ChkArchive:
         """
         return self.to_delete
 
-    def get_files_to_move(self):
+    def get_files_to_move(self, lev1=False):
         """
         Access to the list of files to delete
 
         :return: <list/dict> the file list to of files to move
         """
+        if lev1:
+            return self.move_lev1
+
         return self.to_move
 
     def num_all_files(self, utd, utd2):
@@ -351,7 +404,7 @@ class ChkArchive:
         except:
             return 0
 
-    def file_list(self, utd, utd2, add):
+    def file_list(self, utd, utd2, add, level=0):
         """
         Query the database for the files to delete or move.  Verify
         the results are valid
@@ -364,14 +417,22 @@ class ChkArchive:
         """
 
         # the columns to return
-        columns = utils.get_config_param(config, 'db_columns', 'relevant')
+        columns = utils.get_config_param(config, 'db_columns', f'lev{level}')
 
         # the database search column / value
         key = self.status_col
         val = self.archived_key
+        if level == 1:
+            key = None
+            val = None
+
+        if level == 1:
+            search_type = 'LEV1'
+        else:
+            search_type = 'GENERAL'
 
         try:
-            results = utils.query_rti_api(site, 'search', 'GENERAL', log=log,
+            results = utils.query_rti_api(site, 'search', search_type, log=log,
                                           columns=columns, key=key, val=val,
                                           add=add, utd=utd, utd2=utd2)
             archived_results = json.loads(results)
@@ -380,23 +441,23 @@ class ChkArchive:
             return None
 
         if archived_results.get('success') == 1:
-            self.log.info('API Results = Success')
+            self.log.info(f'{level} API Results = Success')
             data = archived_results.get('data')
 
             d_before = [dat['koaid'] for dat in data]
             self.nresults[0] = len(data)
-            data = self.verify_db_results(data)
+            data = self.verify_db_results(data, columns)
             self.nresults[1] = len(data)
             d_after = [dat['koaid'] for dat in data]
 
-            self.log.info(f"KOAIDs filtered from list: "
+            self.log.info(f"LEVEL {level} KOAIDs filtered from list: "
                           f"{utils.diff_list(d_before, d_after)}")
 
             return data
 
         return None
 
-    def verify_db_results(self, data):
+    def verify_db_results(self, data, column_str):
         """
         Verify the results.
 
@@ -406,21 +467,30 @@ class ChkArchive:
         if not data:
             return None
 
+        columns = column_str.replace(' ', '').split(',')
+
         filter_data = []
         for result in data:
-            self.log.info(f"Checking results for KOAID: {result['koaid']}")
-            err_msg = self._verify_result(result)
+
+            err_msg = self._verify_result(result, columns)
             if err_msg:
-                msg = f"KOAID: {result.get('koaid', '')} {err_msg}"
-                self.log.warning(f"{msg}, REMOVED FROM DELETE LIST.")
-                self.log.info(f"{result}")
+
+                koaid = result.get('koaid', '')
+                if err_msg in self.errors_dict:
+                    if koaid not in self.errors_dict[err_msg]:
+                        self.errors_dict[err_msg].append(koaid)
+                else:
+                    self.errors_dict[err_msg] = [koaid]
+
+                self.log.warning(f"ERROR with results for KOAID: {result['koaid']}")
+                self.log.warning(f"{result}")
                 continue
 
             filter_data.append(result)
 
         return filter_data
 
-    def _verify_result(self, result):
+    def _verify_result(self, result, columns):
         """
         Verify that the results make sense before sending them to be deleted.
 
@@ -430,21 +500,19 @@ class ChkArchive:
         if not result:
             return "No results found from query."
 
-        column_str = utils.get_config_param(config, 'db_columns', 'verify')
-        columns = column_str.replace(' ', '').split(',')
         err = None
         for col in columns:
             if err:
                 break
             val = result.get(col)
 
-            if not val and col != 'status_code':
+            if not val and col not in ['status_code', 'archive_dir', 'level']:
                 err = "INCOMPLETE RESULTS"
             elif col == 'status_code' and val and not result.get('reviewed'):
-                err = f"STATUS CODE: {val} AND REVIEWED: {result.get('reviewed')}"
+                err = f"STATUS CODE: {val}"
             elif col == 'status' and val != self.archived_key:
                 err = f"INVALID STATUS, STATUS must be = {self.archived_key}"
-            elif col == 'process_dir' and val.split('/')[-1] != 'lev0':
+            elif col == 'process_dir' and 'lev' not in val.split('/')[-1]:
                 err = "INVALID ARCHIVE DIR"
 
         if err and err not in self.uniq_warn:
@@ -456,18 +524,26 @@ class ChkArchive:
 if __name__ == '__main__':
     """
     to run:
-        python scrub_koa_rti.py --dev --utd 2021-02-11 --utd2 2021-02-12 --move --remove
+        python scrub_koa_rti.py --utd 2021-02-11 --utd2 2021-02-12
     """
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
 
-    args = utils.parse_args()
-    exclude_insts, include_insts = utils.define_args(args)
+    args = utils.parse_args(config)
+
+    included = utils.get_config_param(config, 'inst_list', 'include')
+    excluded = utils.get_config_param(config, 'inst_list', 'exclude')
+
+    exclude_insts, include_insts = utils.define_insts(included, excluded)
 
     if args.dev:
-        config_type = "DEV"
+        config_type = 'DEV'
     else:
-        config_type = "DEFAULT"
+        config_type = 'DEFAULT'
+
+    remove = int(utils.get_config_param(config, 'MODE', 'remove'))
+    move = int(utils.get_config_param(config, 'MODE', 'move'))
+    lev1 = int(utils.get_config_param(config, 'MODE', 'lev1'))
 
     site = utils.get_config_param(config, config_type, 'site')
     user = utils.get_config_param(config, config_type, 'user')
@@ -484,16 +560,19 @@ if __name__ == '__main__':
                                      f'{storage_root}*', '*', log)
 
     log.info(f"Scrubbing data in UT range: {args.utd} to {args.utd2}\n")
-    log.info(f"REMOVE ORIGINAL (OFNAME) FILES: {args.remove}")
-    log.info(f"MOVE KOA PROCESSED FILES to storage: {args.move}")
+    log.info(f"REMOVE ORIGINAL (OFNAME) FILES: {remove}")
+    log.info(f"MOVE KOA PROCESSED FILES to storage: {move}")
 
     delete_obj = ToDelete()
     metrics = delete_obj.get_metrics()
-    if args.move:
+    if move:
         metrics['koaid'] = delete_obj.store_lev0_files()
         metrics['staged'] = delete_obj.store_stage_files()
 
-    if args.remove:
+    if lev1:
+        metrics['lev1'] = delete_obj.store_lev1_files()
+
+    if remove:
         metrics['sdata'] = delete_obj.delete_files()
 
     utils.clean_empty_dirs(files_root, log)
@@ -508,9 +587,14 @@ if __name__ == '__main__':
     metrics['total_storage_mv'] = store_after - store_before
     metrics['total_files'] = delete_obj.num_all_files()
 
-    report = utils.create_rti_report(args, metrics)
+    report = utils.create_rti_report(args, metrics, move, remove)
     log.info(report)
-    utils.write_emails(config, log_stream, report, 'RTI')
+
+    # only send report if difference in totals.
+    if metrics['total_koa_mv'] == metrics['total_storage_mv']:
+        report = None
+
+    utils.write_emails(config, report, errors=delete_obj.get_errors(), prefix='RTI')
 
 
 

@@ -8,24 +8,26 @@ Functions:
 
 Parameters:
 
-    --dev"
+    --dev
         Only log the commands,  do not execute.
-    --move"
-        move the processed DEP files from the lev0 to the storage servers.
-    --remove"
-        delete the files from the instrument servers.
     --storagedir
         Change the path of the storage server from the one in the configuration file.
     --logdir
-        Define the directory for the log.
+        Change the directory for the log.
     --utd
         Start date to process YYYY-MM-DD.
     --utd2
         End date to process YYYY-MM-DD.
-    --include_inst
-        comma separated list of instruments to include, the default is all instruments.
-    --exclude_inst
-        comma separated list of instruments to exclude, the default is to exclude no instruments.
+
+
+Configuration File (scrubber_config.ini):
+
+    [inst_list]
+    include
+        comma separated list of instruments to include, the default (if empty string) is all instruments.
+    exclude_inst
+        comma separated list of instruments to exclude, the default (if empty string) is to exclude no instruments.
+
 
 Delete:
 
@@ -33,7 +35,8 @@ Delete:
         'koaid,status,status_code,ofname,stage_file,
          process_dir,archive_dir,ofname_deleted'
          
-         Query restricted to: OFNAME_DELETED = 0
+         Query restricted to: 
+            source_deleted = 0
                  
    Results in delete list are verified:
    

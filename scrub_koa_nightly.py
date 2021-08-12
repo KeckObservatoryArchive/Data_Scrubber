@@ -222,4 +222,4 @@ if __name__ == '__main__':
     metrics = delete_obj.get_metrics()
     report = utils.create_nightly_report(metrics, args.utd, args.utd2)
     log.info(report)
-    utils.write_emails(config, log_stream, report, 'KOA')
+    utils.write_emails(config, report, log_stream=log_stream, prefix='KOA')

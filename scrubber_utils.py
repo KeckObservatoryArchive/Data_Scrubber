@@ -38,6 +38,9 @@ def send_email(email_msg, mailto, subject, mailfrom='data_scrubber@keck.hawaii.e
     :param email_msg: <str> message to mail.
     :param config: <class 'configparser.ConfigParser'> the config file parser.
     """
+    if not email_msg:
+        return
+
     import smtplib
 
     msg = f"From: {mailfrom}\r\nTo: {mailto}\r\n"
@@ -84,7 +87,7 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
     return results
 
 
-def create_rti_report(args, metrics):
+def create_rti_report(args, metrics, move, remove):
     """
     Form the report to be emailed at the end of a scrub run.
 
@@ -109,13 +112,13 @@ def create_rti_report(args, metrics):
         for err in metrics['warnings']:
             report += f"\n    {err}"
 
-    if args.remove:
+    if remove:
         header = "Files on Instrument servers"
         report += f"\n\n{header}" + "\n" + "-" * len(header)
         report += f"\n{metrics['sdata'][0]} : OFNAME Files found."
         report += f"\n{metrics['sdata'][1]} : OFNAME Files deleted."
 
-    if args.move:
+    if move:
         header = "Fits Files created by DEP on vm-koarti"
         report += f"\n\n{header}" + "\n" + "-" * len(header)
         report += f"\n{metrics['staged'][0]} : Stage files found."
@@ -172,18 +175,21 @@ def clean_empty_dirs(root_dir, log):
         return 0
 
 
-def write_emails(config, log_stream, report, prefix=''):
+def write_emails(config, report, log_stream=None, errors=None, prefix=''):
     """
     Finish up the scrubbers,  create and send the emails.
 
     :param config: the pointer to the config file.
-    :param log_stream: the logging stream.
     :param report: the report to send.
+    :param log_stream: the logging stream.
+    :param errors: <dict> error key,  koaid list val
     :param prefix: prefix for the subject of the email.
     """
     now = datetime.now().strftime('%Y-%m-%d')
     mailto = get_config_param(config, 'email', 'admin')
-    send_email(report, mailto, f'{prefix} Scrubber Report: {now}', mailfrom=mailto)
+    mailfrom = get_config_param(config, 'email', 'from')
+    send_email(report, mailto,
+               f'{prefix} Scrubber Report: {now}', mailfrom=mailfrom)
 
     if log_stream:
         log_contents = log_stream.getvalue()
@@ -192,7 +198,16 @@ def write_emails(config, log_stream, report, prefix=''):
         if log_contents:
             mailto = get_config_param(config, 'email', 'warnings')
             send_email(log_contents, mailto,
-                       f'{prefix} Scrubber Warnings: {now}')
+                       f'{prefix} Scrubber Warnings: {now}', mailfrom=mailfrom)
+
+    if errors:
+        error_report = "ERRORS FOUND / KOAID\n\n"
+        for err in errors.keys():
+            error_report += f'ERROR: {err} \n {errors[err]}\n\n'
+
+        mailto = get_config_param(config, 'email', 'warnings')
+        send_email(error_report, mailto,
+                   f'{prefix} Scrubber Warnings: {now}', mailfrom=mailfrom)
 
 
 def create_logger(name, logdir):
@@ -239,29 +254,27 @@ def create_logger(name, logdir):
     return log_name, log_stream
 
 
-def parse_args():
+def parse_args(config):
     """
     Parse the command line arguments.
 
     :return: <obj> commandline arguments
     """
     now = datetime.now()
+    start = int(get_config_param(config, 'TIMEFRAME', 'start'))
+    end = int(get_config_param(config, 'TIMEFRAME', 'end'))
+
     parser = argparse.ArgumentParser(description="Run the Data Scrubber")
 
     parser.add_argument("--dev", action="store_true",
                         help="Only log the commands,  do not execute")
-    parser.add_argument("--move", action="store_true",
-                        help="move the processed DEP files from the lev0 to "
-                             "the storage servers.")
-    parser.add_argument("--remove", action="store_true",
-                        help="delete the files from the instrument servers")
     parser.add_argument("--logdir", type=str, default='log',
                         help="Define the directory for the log.")
     parser.add_argument("--utd", type=str,
-                        default=(now - timedelta(days=28)).strftime('%Y-%m-%d'),
+                        default=(now - timedelta(days=start)).strftime('%Y-%m-%d'),
                         help="Start date to process YYYY-MM-DD.")
     parser.add_argument("--utd2", type=str,
-                        default=(now - timedelta(days=21)).strftime('%Y-%m-%d'),
+                        default=(now - timedelta(days=end)).strftime('%Y-%m-%d'),
                         help="End date to process YYYY-MM-DD.")
     parser.add_argument("--include_inst", type=str,
                         default=None,
@@ -275,21 +288,23 @@ def parse_args():
     return parser.parse_args()
 
 
-def define_args(args):
+def define_insts(include, exclude):
     """
     Set the lists of instruments to include / exclude
-    :param args: <class 'argparse.Namespace'> parsed command line arguments.
+
+    :param include: <str> a comma separated string of instruments to include
+    :param exclude: <str> a comma separated string of instruments to exclude
+
     :return: <list, list> the lists of included and excluded instruments.
     """
-    exclude_insts = args.exclude_inst
-    include_insts = args.include_inst
-    if args.exclude_inst:
-        exclude_insts = exclude_insts.replace(" ", "").split(",")
-    if args.include_inst:
-        include_insts = include_insts.replace(" ", "").split(",")
+    exclude_insts = []
+    include_insts = []
+    if exclude:
+        exclude_insts = exclude.replace(" ", "").split(",")
+    if include:
+        include_insts = include.replace(" ", "").split(",")
 
     return exclude_insts, include_insts
-
 
 def get_config_param(config, section, param_name):
     """
