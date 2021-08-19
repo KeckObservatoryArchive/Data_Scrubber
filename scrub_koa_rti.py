@@ -442,13 +442,17 @@ class ChkArchive:
 
         if archived_results.get('success') == 1:
             self.log.info(f'{level} API Results = Success')
-            data = archived_results.get('data')
 
+            data = archived_results.get('data', [])
             d_before = [dat['koaid'] for dat in data]
             self.nresults[0] = len(data)
+
             data = self.verify_db_results(data, columns)
-            self.nresults[1] = len(data)
-            d_after = [dat['koaid'] for dat in data]
+            if data:
+                self.nresults[1] = len(data)
+                d_after = [dat['koaid'] for dat in data]
+            else:
+                d_after = []
 
             self.log.info(f"LEVEL {level} KOAIDs filtered from list: "
                           f"{utils.diff_list(d_before, d_after)}")
@@ -482,6 +486,7 @@ class ChkArchive:
                 else:
                     self.errors_dict[err_msg] = [koaid]
 
+                self.log.warning(f"ERROR: {err_msg}")
                 self.log.warning(f"ERROR with results for KOAID: {result['koaid']}")
                 self.log.warning(f"{result}")
                 continue

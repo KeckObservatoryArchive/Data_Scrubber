@@ -485,10 +485,6 @@ def count_store(user, store_server, store_path, utd, log):
     cmd = ['ssh', f'{user}@{store_server}', 'find',
            f'{store_path}/{utd}/', '-type', 'f', '|', 'wc', '-l']
 
-    # try:
-    #     if dir_exists(user, store_server, store_path, utd) == 0:
-    #         return 0
-
     try:
         n_store = int(subprocess.check_output(cmd).decode('utf-8'))
     except Exception as err:
