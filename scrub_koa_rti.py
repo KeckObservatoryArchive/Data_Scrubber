@@ -341,7 +341,7 @@ class ChkArchive:
         self.archived_key = utils.get_config_param(config, 'archive', 'archived')
         self.deleted_column = utils.get_config_param(config, 'db_columns', 'deleted')
         self.status_col = utils.get_config_param(config, 'db_columns', 'status')
-        self.nresults = [0, 0]
+        self.nresults = {'del0': [0, 0], 'mv0': [0, 0], 'mv1': [0, 0]}
         self.uniq_warn = []
         self.errors_dict = {}
 
@@ -350,13 +350,13 @@ class ChkArchive:
         self.move_lev1 = []
 
         if remove:
-            self.to_delete = self.file_list(args.utd, args.utd2, "")
+            self.to_delete = self.file_list(args.utd, args.utd2, "", 'del')
         if move:
             self.to_move = self.file_list(args.utd, args.utd2,
-                                          "ARCHIVE_DIR IS NULL")
+                                          "ARCHIVE_DIR IS NULL", 'mv')
         if lev1:
             self.move_lev1 = self.file_list(args.utd, args.utd2,
-                                            "ARCHIVE_DIR IS NULL", level=1)
+                                            "ARCHIVE_DIR IS NULL", 'mv', level=1)
 
     def get_errors(self):
         return self.errors_dict
@@ -404,7 +404,7 @@ class ChkArchive:
         except:
             return 0
 
-    def file_list(self, utd, utd2, add, level=0):
+    def file_list(self, utd, utd2, add, cmd_type, level=0):
         """
         Query the database for the files to delete or move.  Verify
         the results are valid
@@ -415,6 +415,7 @@ class ChkArchive:
         :param add: <str> the tail of the query string.
         :return: <dict> the verified data results from the query
         """
+        cmd_type = f'{cmd_type}{level}'
 
         # the columns to return
         columns = utils.get_config_param(config, 'db_columns', f'lev{level}')
@@ -445,11 +446,11 @@ class ChkArchive:
 
             data = archived_results.get('data', [])
             d_before = [dat['koaid'] for dat in data]
-            self.nresults[0] = len(data)
+            self.nresults[cmd_type][0] = len(data)
 
             data = self.verify_db_results(data, columns)
             if data:
-                self.nresults[1] = len(data)
+                self.nresults[cmd_type][1] = len(data)
                 d_after = [dat['koaid'] for dat in data]
             else:
                 d_after = []

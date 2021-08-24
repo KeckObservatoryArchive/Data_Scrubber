@@ -104,13 +104,19 @@ def create_rti_report(args, metrics, move, remove):
 
     header = "Number of results"
     report += f"\n\n{header}" + "\n" + "-" * len(header)
-    report += f"\n{metrics['nresults'][0]} : number of KOAID in results."
-    report += f"\n{metrics['nresults'][1]} : number of verified results."
-    diff = metrics['nresults'][0] - metrics['nresults'][1]
-    if diff > 0:
-        report += f"\n\nErrors: "
-        for err in metrics['warnings']:
-            report += f"\n    {err}"
+    report += f"\n{metrics['nresults']['mv0'][0]} : KOAID in results to move (lev0)."
+    report += f"\n{metrics['nresults']['mv0'][1]} : verified results to move (lev0)."
+    report += f"\n{metrics['nresults']['mv1'][0]} : KOAID in results to move (lev1)."
+    report += f"\n{metrics['nresults']['mv1'][1]} : verified results to move (lev1)."
+    report += f"\n{metrics['nresults']['del0'][0]} : KOAID in sdata results to delete (lev0)."
+    report += f"\n{metrics['nresults']['del0'][1]} : verified sdata results to delete (lev0)."
+
+    for val in {'mv0', 'del0', 'mv1'}:
+        diff = metrics['nresults'][val][0] - metrics['nresults'][val][1]
+        if diff > 0:
+            report += f"\n\nErrors: "
+            for err in metrics['warnings']:
+                report += f"\n    {err}"
 
     if remove:
         header = "Files on Instrument servers"
