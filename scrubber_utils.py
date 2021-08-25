@@ -51,7 +51,7 @@ def send_email(email_msg, mailto, subject, mailfrom='data_scrubber@keck.hawaii.e
     server.quit()
 
 
-def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
+def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None, inst=None,
                   utd=None, utd2=None, update_val=None, add=None, log=None):
     """
     Query the API to get or update information in the KOA RTI DB.
@@ -87,7 +87,7 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None,
     return results
 
 
-def create_rti_report(args, metrics, move, remove):
+def create_rti_report(args, metrics, move, remove, inst):
     """
     Form the report to be emailed at the end of a scrub run.
 
@@ -95,7 +95,8 @@ def create_rti_report(args, metrics, move, remove):
     :return: <str> the report.
     """
 
-    report = f"\nRTI Data Scrubber Results {args.utd} to {args.utd2}."
+    report = f"\nRTI Data Scrubber Results for {inst.upper()} " \
+             f"{args.utd} to {args.utd2}."
 
     header = "Totals"
     report += f"\n\n{header}" + "\n" + "-" * len(header)
@@ -270,6 +271,10 @@ def parse_args(config):
     start = int(get_config_param(config, 'TIMEFRAME', 'start'))
     end = int(get_config_param(config, 'TIMEFRAME', 'end'))
 
+    insts = get_config_param(config, 'inst_list', 'insts')
+    insts = f'{insts}, {insts.lower()}'
+    inst_set = set(insts.split(', '))
+
     parser = argparse.ArgumentParser(description="Run the Data Scrubber")
 
     parser.add_argument("--dev", action="store_true",
@@ -282,14 +287,10 @@ def parse_args(config):
     parser.add_argument("--utd2", type=str,
                         default=(now - timedelta(days=end)).strftime('%Y-%m-%d'),
                         help="End date to process YYYY-MM-DD.")
-    parser.add_argument("--include_inst", type=str,
-                        default=None,
-                        help="comma separated list of instruments to include, "
-                             "the default is all instruments.")
-    parser.add_argument("--exclude_inst", type=str,
-                        default=None,
-                        help="comma separated list of instruments to exclude, "
-                             "the default is to exclude no instruments.")
+    parser.add_argument("--inst", type=str, choices=inst_set, required=True,
+                        help="Name of instrument to run the scrubber for.")
+    parser.add_argument("--remove", type=int, choices={0, 1}, default=None,
+                        help="remove the DEP processed data.")
 
     return parser.parse_args()
 

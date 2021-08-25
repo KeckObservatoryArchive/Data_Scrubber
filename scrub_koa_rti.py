@@ -11,11 +11,11 @@ CONFIG_FILE = f'{APP_PATH}/scrubber_config.ini'
 
 
 class ToDelete:
-    def __init__(self):
+    def __init__(self, inst):
         self.utd = args.utd
         self.utd2 = args.utd2
         self.log = logging.getLogger(log_name)
-        self.db_obj = ChkArchive()
+        self.db_obj = ChkArchive(inst)
         self.to_delete = self.db_obj.get_files_to_delete()
         self.to_move = self.db_obj.get_files_to_move()
         self.dirs_made = []
@@ -46,7 +46,8 @@ class ToDelete:
 
     def delete_files(self):
         """
-        This will find and delete the files for the specified date range.
+        This will find and delete the sdata (original) files within the
+        specified date range.
 
         :return: <(int, int)> number deleted, number found to delete.
         """
@@ -81,7 +82,7 @@ class ToDelete:
         """
         Skeleton function to delete or move a file list,  file by file.
 
-        :return: <list<int>,<int>> number moved/delted, number in list.
+        :return: <list<int>,<int>> number moved/deleted, number in list.
         """
         if not file_list:
             return [0, 0]
@@ -324,19 +325,19 @@ class ToDelete:
 
         return storage_path
 
-    @staticmethod
-    def _chk_inst(inst):
-        if exclude_insts and inst in exclude_insts:
-            return False
-
-        if include_insts and inst not in include_insts:
-            return False
-
-        return True
+    # @staticmethod
+    # def _chk_inst(inst):
+    #     if exclude_insts and inst in exclude_insts:
+    #         return False
+    #
+    #     if include_insts and inst not in include_insts:
+    #         return False
+    #
+    #     return True
 
 
 class ChkArchive:
-    def __init__(self):
+    def __init__(self, inst):
         self.log = logging.getLogger(log_name)
         self.archived_key = utils.get_config_param(config, 'archive', 'archived')
         self.deleted_column = utils.get_config_param(config, 'db_columns', 'deleted')
@@ -350,12 +351,12 @@ class ChkArchive:
         self.move_lev1 = []
 
         if remove:
-            self.to_delete = self.file_list(args.utd, args.utd2, "", 'del')
+            self.to_delete = self.file_list(args.utd, args.utd2, inst, "", 'del')
         if move:
-            self.to_move = self.file_list(args.utd, args.utd2,
+            self.to_move = self.file_list(args.utd, args.utd2, inst,
                                           "ARCHIVE_DIR IS NULL", 'mv')
         if lev1:
-            self.move_lev1 = self.file_list(args.utd, args.utd2,
+            self.move_lev1 = self.file_list(args.utd, args.utd2, inst,
                                             "ARCHIVE_DIR IS NULL", 'mv', level=1)
 
     def get_errors(self):
@@ -404,7 +405,7 @@ class ChkArchive:
         except:
             return 0
 
-    def file_list(self, utd, utd2, add, cmd_type, level=0):
+    def file_list(self, utd, utd2, inst, add, cmd_type, level=0):
         """
         Query the database for the files to delete or move.  Verify
         the results are valid
@@ -435,7 +436,7 @@ class ChkArchive:
         try:
             results = utils.query_rti_api(site, 'search', search_type, log=log,
                                           columns=columns, key=key, val=val,
-                                          add=add, utd=utd, utd2=utd2)
+                                          add=add, utd=utd, utd2=utd2, inst=inst)
             archived_results = json.loads(results)
         except Exception as err:
             self.log.info(f"NO RESULTS from query,  error: {err}")
@@ -537,17 +538,16 @@ if __name__ == '__main__':
 
     args = utils.parse_args(config)
 
-    included = utils.get_config_param(config, 'inst_list', 'include')
-    excluded = utils.get_config_param(config, 'inst_list', 'exclude')
-
-    exclude_insts, include_insts = utils.define_insts(included, excluded)
-
     if args.dev:
         config_type = 'DEV'
     else:
         config_type = 'DEFAULT'
 
-    remove = int(utils.get_config_param(config, 'MODE', 'remove'))
+    if not args.remove:
+        remove = int(utils.get_config_param(config, 'MODE', 'remove'))
+    else:
+        remove = args.remove
+
     move = int(utils.get_config_param(config, 'MODE', 'move'))
     lev1 = int(utils.get_config_param(config, 'MODE', 'lev1'))
 
@@ -569,7 +569,7 @@ if __name__ == '__main__':
     log.info(f"REMOVE ORIGINAL (OFNAME) FILES: {remove}")
     log.info(f"MOVE KOA PROCESSED FILES to storage: {move}")
 
-    delete_obj = ToDelete()
+    delete_obj = ToDelete(args.inst)
     metrics = delete_obj.get_metrics()
     if move:
         metrics['koaid'] = delete_obj.store_lev0_files()
@@ -593,7 +593,7 @@ if __name__ == '__main__':
     metrics['total_storage_mv'] = store_after - store_before
     metrics['total_files'] = delete_obj.num_all_files()
 
-    report = utils.create_rti_report(args, metrics, move, remove)
+    report = utils.create_rti_report(args, metrics, move, remove, args.inst)
     log.info(report)
 
     # only send report if difference in totals.
