@@ -109,8 +109,9 @@ def create_rti_report(args, metrics, move, remove, inst):
     report += f"\n{metrics['nresults']['mv0'][1]} : verified results to move (lev0)."
     report += f"\n{metrics['nresults']['mv1'][0]} : KOAID in results to move (lev1)."
     report += f"\n{metrics['nresults']['mv1'][1]} : verified results to move (lev1)."
-    report += f"\n{metrics['nresults']['del0'][0]} : KOAID in sdata results to delete (lev0)."
-    report += f"\n{metrics['nresults']['del0'][1]} : verified sdata results to delete (lev0)."
+    if remove:
+        report += f"\n{metrics['nresults']['del0'][0]} : KOAID in sdata results to delete (lev0)."
+        report += f"\n{metrics['nresults']['del0'][1]} : verified sdata results to delete (lev0)."
 
     for val in {'mv0', 'del0', 'mv1'}:
         diff = metrics['nresults'][val][0] - metrics['nresults'][val][1]

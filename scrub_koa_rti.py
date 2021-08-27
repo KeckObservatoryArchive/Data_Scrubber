@@ -556,7 +556,11 @@ if __name__ == '__main__':
     store_server = utils.get_config_param(config, config_type, 'store_server')
     storage_root = utils.get_config_param(config, config_type, 'storage_root_rti')
 
-    log_dir = utils.get_config_param(config, config_type, 'log_dir')
+    if not args.logdir:
+        log_dir = utils.get_config_param(config, config_type, 'log_dir')
+    else:
+        log_dir = args.logdir
+
     log_name, log_stream = utils.create_logger('rti_scrubber', log_dir)
     log = logging.getLogger(log_name)
     files_root = utils.get_config_param(config, 'koa_disk', 'path_root')
