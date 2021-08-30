@@ -31,7 +31,7 @@ def chk_file_exists(file_location, filename=None):
     return os.path.exists(file_location)
 
 
-def send_email(email_msg, mailto, subject, mailfrom='data_scrubber@keck.hawaii.edu'):
+def send_email(email_msg, mailto, mailfrom, mailserver, subject):
     """
     send an email if there are any warnings or errors logged.
 
@@ -46,7 +46,7 @@ def send_email(email_msg, mailto, subject, mailfrom='data_scrubber@keck.hawaii.e
     msg = f"From: {mailfrom}\r\nTo: {mailto}\r\n"
     msg += f"Subject: {subject}\r\n\r\n{email_msg}"
 
-    server = smtplib.SMTP('mail.keck.hawaii.edu')
+    server = smtplib.SMTP(mailserver)
     server.sendmail(mailfrom, mailto, msg)
     server.quit()
 
@@ -196,8 +196,10 @@ def write_emails(config, report, log_stream=None, errors=None, prefix=''):
     now = datetime.now().strftime('%Y-%m-%d')
     mailto = get_config_param(config, 'email', 'admin')
     mailfrom = get_config_param(config, 'email', 'from')
-    send_email(report, mailto,
-               f'{prefix} Scrubber Report: {now}', mailfrom=mailfrom)
+    mailserver = get_config_param(config, 'email', 'server')
+
+    send_email(report, mailto, mailfrom, mailserver,
+               f'{prefix} Scrubber Report: {now}')
 
     if log_stream:
         log_contents = log_stream.getvalue()
@@ -205,8 +207,8 @@ def write_emails(config, report, log_stream=None, errors=None, prefix=''):
 
         if log_contents:
             mailto = get_config_param(config, 'email', 'warnings')
-            send_email(log_contents, mailto,
-                       f'{prefix} Scrubber Warnings: {now}', mailfrom=mailfrom)
+            send_email(log_contents, mailto, mailfrom, mailserver,
+                       f'{prefix} Scrubber Warnings: {now}')
 
     if errors:
         error_report = "ERRORS FOUND / KOAID\n\n"
@@ -214,8 +216,8 @@ def write_emails(config, report, log_stream=None, errors=None, prefix=''):
             error_report += f'ERROR: {err} \n {errors[err]}\n\n'
 
         mailto = get_config_param(config, 'email', 'warnings')
-        send_email(error_report, mailto,
-                   f'{prefix} Scrubber Warnings: {now}', mailfrom=mailfrom)
+        send_email(error_report, mailto, mailfrom, mailserver,
+                   f'{prefix} Scrubber Warnings: {now}')
 
 
 def create_logger(name, logdir):
@@ -387,8 +389,11 @@ def inst_disk_usage_ok(inst, config, config_type, log):
     :return: <bool> True if disk used < disk free
     """
     koa_disk, storage_disk = get_locations(inst, config, config_type)
-    stats = remote_df('koaadmin', 'vm-koaserver5', koa_disk)
-    log.info(f'Disk Space Statistics for {inst} in vm-koaserver5: {koa_disk}.')
+    user = get_config_param(config, config_type, 'user')
+    server = get_config_param(config, 'servers', 'user')
+
+    stats = remote_df(user, server, koa_disk)
+    log.info(f'Disk Space Statistics for {inst} in {server}: {koa_disk}.')
     log.info(f'Total: {stats.total}, Used: {stats.used}, Free: {stats.free}')
 
     return stats.used < stats.free
@@ -396,8 +401,7 @@ def inst_disk_usage_ok(inst, config, config_type, log):
 
 def get_locations(inst, config, config_type):
     """
-    Determine the directories on each of the disks,  vm-koaserver5 and
-    storageserver.
+    Determine the directories on each of the disks.
 
     :param inst: <str> the instrument
     :param config: the config file pointer

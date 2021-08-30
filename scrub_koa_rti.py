@@ -293,7 +293,6 @@ class ToDelete:
     def determine_storage(koaid, level=0, ofname=None):
         """
         Find the storage directory from the KOAID.
-        # koadmin@storageserver:/koastorage04/DEIMOS/koadata39/
 
         :param koaid: <str> <inst>.utd.#####.## (ie: KB.20210116.57436.94)
         :return: <str> full path to storage directory (including lev0)
@@ -587,8 +586,8 @@ if __name__ == '__main__':
 
     utils.clean_empty_dirs(files_root, log)
     nfiles_after = utils.count_koa_files(args)
-    store_after = utils.count_store(user, store_server,
-                                    f'{storage_root}*', '*', log)
+    store_after = utils.count_store(user, store_server, f'{storage_root}*',
+                                    '*', log)
 
     log.info(f'Number of KOA FILES before: {nfiles_before}')
     log.info(f'Number of KOA FILES after: {nfiles_after}')
