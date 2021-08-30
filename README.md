@@ -14,6 +14,10 @@ Parameters:
         Change the path of the storage server from the one in the configuration file.
     --logdir
         Change the directory for the log.
+    --inst 
+        the instrument to scrubber,  mandatory input
+    --remove
+        removes the processed data while moving to storage (overrides the configuration parameter)
     --utd
         Start date to process YYYY-MM-DD.
     --utd2
@@ -61,7 +65,7 @@ Delete:
         * OFNAME files (dep_status table) are deleted.
         * files are removed (os.remove) individually by the OFNAME.
         * the process is logged.
-        * The OFNAME_DELETED flag in koa->dep_status is set from 0 to 1 (koarti API call).    
+        * The OFNAME_DELETED flag in koa->dep_status is set from 0 to 1 (koa rti API call).    
    
 Move:
 
@@ -117,14 +121,10 @@ Move:
         
    Required:
    
-   koarti ssh key must be on vm-koaserver5 and storageserver
+   ssh key must be on data and storage servers
    (in authorized_keys):
    
-        * ssh koarti@vm-koarti.keck.hawaii.edu
-        * ssh-copy-id -i ~/.ssh/rsa_rsa.pub koaadmin@vm-koaserver5
-        
    Cron:
-    koarti@vm-koarti
        0  9 * * 5 /usr/local/home/koarti/lfuhrman/Scrubber/scrub.csh > /dev/null 2>&1
 
         
@@ -132,9 +132,10 @@ Move:
 
 Functions:
 
-    move the KOA DEP files from vm-koaserver5 (defined in the configuration
-    file) to the storageserver.  The function is intended for the KOA
-    processed data that is processed each night,  not for realtime-ingestion (RTI).
+    move the KOA DEP files from data server to the storage server.  The
+    servers are defined in the configuration files.  The function is intended 
+    for the KOA processed data that is processed each night,  not for 
+    realtime-ingestion (RTI).
 
 
 Parameters:
@@ -149,8 +150,8 @@ Parameters:
         is 14 days before the current date.
     --dev
         test mode only copies data,  it does not remove the data
-        from vm-koaserver5.  This is configured in the 
-        scrubber_config.ini file.
+        from data server.  The mode is configured in the 
+        scrubber_config.ini file but can be overwritten here.
 
 
 Logs:
@@ -171,7 +172,7 @@ Report / Email generated:
     0 :Number of files moved to storage.
 
 
-Cron runs on vm-koaserver5:
+Cron runs on data server:
 
 27 14 * * * /usr/local/anaconda3-5.0.0.1/bin/python /usr/local/kroot/archive/scrubber/scrub_koa_nightly.py --dev > /dev/null 2>&1
    
