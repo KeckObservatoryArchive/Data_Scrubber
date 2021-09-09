@@ -125,7 +125,6 @@ def write_emails(log_stream, mailto, prefix=''):
     """
     Finish up the scrubbers,  create and send the emails.
 
-    :param config: the pointer to the config file.
     :param log_stream: the logging stream.
     :param report: the report to send.
     :param prefix: prefix for the subject of the email.
@@ -154,6 +153,6 @@ def send_email(email_msg, mailto, subject):
     msg = f"From: {mailfrom}\r\nTo: {mailto}\r\n"
     msg += f"Subject: {subject}\r\n\r\n{email_msg}"
 
-    server = smtplib.SMTP('mail.keck.hawaii.edu')
+    server = smtplib.SMTP('relay.keck.hawaii.edu')
     server.sendmail(mailfrom, mailto, msg)
     server.quit()
