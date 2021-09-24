@@ -282,7 +282,7 @@ def parse_args(config):
 
     parser.add_argument("--dev", action="store_true",
                         help="Only log the commands,  do not execute")
-    parser.add_argument("--logdir", type=str, default='log',
+    parser.add_argument("--logdir", type=str,
                         help="Define the directory for the log.")
     parser.add_argument("--utd", type=str,
                         default=(now - timedelta(days=start)).strftime('%Y-%m-%d'),
