@@ -31,7 +31,7 @@ def chk_file_exists(file_location, filename=None):
     return os.path.exists(file_location)
 
 
-def send_email(email_msg, mailto, mailfrom, mailserver, subject):
+def send_email(email_msg, mailto, mailfrom, mailserver, subject, log):
     """
     send an email if there are any warnings or errors logged.
 
@@ -46,9 +46,12 @@ def send_email(email_msg, mailto, mailfrom, mailserver, subject):
     msg = f"From: {mailfrom}\r\nTo: {mailto}\r\n"
     msg += f"Subject: {subject}\r\n\r\n{email_msg}"
 
-    server = smtplib.SMTP(mailserver)
-    server.sendmail(mailfrom, mailto, msg)
-    server.quit()
+    try:
+        server = smtplib.SMTP(mailserver)
+        server.sendmail(mailfrom, mailto, msg)
+        server.quit()
+    except Exception as err:
+        log.warning(f"Error sending Email. Error: {err}.")
 
 
 def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None, inst=None,
@@ -183,7 +186,7 @@ def clean_empty_dirs(root_dir, log):
         return 0
 
 
-def write_emails(config, report, log_stream=None, errors=None, prefix=''):
+def write_emails(config, report, log, log_stream=None, errors=None, prefix=''):
     """
     Finish up the scrubbers,  create and send the emails.
 
@@ -199,7 +202,7 @@ def write_emails(config, report, log_stream=None, errors=None, prefix=''):
     mailserver = get_config_param(config, 'email', 'server')
 
     send_email(report, mailto, mailfrom, mailserver,
-               f'{prefix} Scrubber Report: {now}')
+               f'{prefix} Scrubber Report: {now}', log)
 
     if log_stream:
         log_contents = log_stream.getvalue()
@@ -208,7 +211,7 @@ def write_emails(config, report, log_stream=None, errors=None, prefix=''):
         if log_contents:
             mailto = get_config_param(config, 'email', 'warnings')
             send_email(log_contents, mailto, mailfrom, mailserver,
-                       f'{prefix} Scrubber Warnings: {now}')
+                       f'{prefix} Scrubber Warnings: {now}', log)
 
     if errors:
         error_report = "ERRORS FOUND / KOAID\n\n"
@@ -217,7 +220,7 @@ def write_emails(config, report, log_stream=None, errors=None, prefix=''):
 
         mailto = get_config_param(config, 'email', 'warnings')
         send_email(error_report, mailto, mailfrom, mailserver,
-                   f'{prefix} Scrubber Warnings: {now}')
+                   f'{prefix} Scrubber Warnings: {now}', log)
 
 
 def create_logger(name, logdir):
@@ -315,6 +318,7 @@ def define_insts(include, exclude):
         include_insts = include.replace(" ", "").split(",")
 
     return exclude_insts, include_insts
+
 
 def get_config_param(config, section, param_name):
     """

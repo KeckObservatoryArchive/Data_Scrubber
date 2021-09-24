@@ -555,6 +555,8 @@ if __name__ == '__main__':
     store_server = utils.get_config_param(config, config_type, 'store_server')
     storage_root = utils.get_config_param(config, config_type, 'storage_root_rti')
 
+    storage_num = utils.get_config_param(config, 'storage_disk', args.inst)
+
     if not args.logdir:
         log_dir = utils.get_config_param(config, config_type, 'log_dir')
     else:
@@ -565,8 +567,10 @@ if __name__ == '__main__':
     files_root = utils.get_config_param(config, 'koa_disk', 'path_root')
 
     nfiles_before = utils.count_koa_files(args)
+
+    storage_dir = storage_root +storage_num
     store_before = utils.count_store(user, store_server,
-                                     f'{storage_root}*', '*', log)
+                                     f'{storage_dir}', f'{args.inst}/*', log)
 
     log.info(f"Scrubbing data in UT range: {args.utd} to {args.utd2}\n")
     log.info(f"REMOVE ORIGINAL (OFNAME) FILES: {remove}")
@@ -586,8 +590,10 @@ if __name__ == '__main__':
 
     utils.clean_empty_dirs(files_root, log)
     nfiles_after = utils.count_koa_files(args)
-    store_after = utils.count_store(user, store_server, f'{storage_root}*',
-                                    '*', log)
+    store_after = utils.count_store(user, store_server,
+                                    f'{storage_dir}', f'{args.inst}/*', log)
+
+    store_after = 88
 
     log.info(f'Number of KOA FILES before: {nfiles_before}')
     log.info(f'Number of KOA FILES after: {nfiles_after}')
@@ -603,7 +609,8 @@ if __name__ == '__main__':
     if metrics['total_koa_mv'] == metrics['total_storage_mv']:
         report = None
 
-    utils.write_emails(config, report, errors=delete_obj.get_errors(), prefix='RTI')
+    utils.write_emails(config, report, log, errors=delete_obj.get_errors(),
+                       prefix='RTI')
 
 
 
