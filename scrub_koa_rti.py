@@ -593,8 +593,6 @@ if __name__ == '__main__':
     store_after = utils.count_store(user, store_server,
                                     f'{storage_dir}', f'{args.inst}/*', log)
 
-    store_after = 88
-
     log.info(f'Number of KOA FILES before: {nfiles_before}')
     log.info(f'Number of KOA FILES after: {nfiles_after}')
 
