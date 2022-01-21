@@ -1,5 +1,5 @@
 import logging
-from os import path, mkdir, rmdir
+from os import path, mkdir, rmdir, walk
 from datetime import datetime, timedelta
 import scrub_ao_utils as utils
 
@@ -64,7 +64,8 @@ class ScrubAO:
 
         if cnt1['summit'] > cnt2['hq']:
             log.warning('The file count at the summit is greater than at HQ'
-                        f" after sync! UTD = {utd_datetime.strftime('%Y%m%d')}")
+                        f" after sync! UTD = {utd_datetime.strftime('%Y%m%d')},"
+                        f" paths = {paths}")
 
     def rsync_cp(self, paths, remove=False):
         """
@@ -84,6 +85,13 @@ class ScrubAO:
             try:
                 mkdir(hq_month_path)
                 log.info(f"Created the directory for the month {hq_month_path}")
+            except OSError:
+                # check to see if the year needs to be made
+                try:
+                    mkdir(path.dirname(hq_month_path.strip('/')))
+                except:
+                    log.info(f"Error creating the directory for the year "
+                             f"{path.dirname(hq_month_path.strip('/'))}")
             except:
                 log.info(f"Error creating the directory for the month "
                          f"{hq_month_path}")
@@ -107,10 +115,27 @@ class ScrubAO:
         :param paths: <dict> the paths: summit - source, HQ - destination
         :return: <int> 0 on success, -1 on error
         """
-        ret_val = self.rsync_cp(paths, remove=True)
-        if ret_val != 0:
-            return ret_val
+        # TODO need to rsync in the sub directories
+        # TODO should work,  untested
+        print('summit', paths['summit'])
 
+        dirs = sorted([x[0] for x in walk(paths['summit'])],
+                      key=len, reverse=True)
+        ret_val = 0
+        # the last will be the shortest path
+        if dirs and not path.exists(dirs[-1]):
+            mkdir(dirs[-1])
+
+        for direct in dirs:
+            paths['summit'] = direct
+            ret_val = self.rsync_cp(paths, remove=True)
+            if ret_val != 0:
+                log.warning(f'Error syncing files,  check paths! {paths}')
+                ret_val += ret_val
+            # TODO need way to deal with .swp files
+            # -rw-------  1 k2obsao aodev 16384 Aug 19 23:37 .telnet-sc2.log.swp
+
+        # ---
         # clean the empty directories left behind.
         cln_cmd = ['find', paths['summit'], '-depth', '-type', 'd', '-empty',
                    '-not', '-path', paths['summit'], '-exec', 'rmdir', '{}', ';']
