@@ -117,8 +117,8 @@ class ScrubAO:
         """
         # TODO need to rsync in the sub directories
         # TODO should work,  untested
-        print('summit', paths['summit'])
-
+        # print('summit', paths['summit'])
+        #
         dirs = sorted([x[0] for x in walk(paths['summit'])],
                       key=len, reverse=True)
         ret_val = 0
@@ -132,19 +132,24 @@ class ScrubAO:
             if ret_val != 0:
                 log.warning(f'Error syncing files,  check paths! {paths}')
                 ret_val += ret_val
+                
             # TODO need way to deal with .swp files
+            # rsync: send_files failed to open "/net/k2aoserver/k2aodata/nightly/21/08/18/.telnet-sc2.log.swp": Permission denied (13)
             # -rw-------  1 k2obsao aodev 16384 Aug 19 23:37 .telnet-sc2.log.swp
 
         # ---
         # clean the empty directories left behind.
-        cln_cmd = ['find', paths['summit'], '-depth', '-type', 'd', '-empty',
-                   '-not', '-path', paths['summit'], '-exec', 'rmdir', '{}', ';']
-        utils.run_cmd(cln_cmd, log)
+        if path.isfile(paths['summit']):
+            cln_cmd = ['find', paths['summit'], '-depth', '-type', 'd',
+                       '-empty', '-not', '-path', paths['summit'], '-exec',
+                       'rmdir', '{}', ';']
 
-        # clean the date directory,  otherwise above cmd gets permission denied.
-        cln_cmd = ['ssh', f'{self.ao_user}@{self.ao_server}', 'rmdir',
-                   paths['summit']]
-        utils.run_cmd(cln_cmd, log)
+            utils.run_cmd(cln_cmd, log)
+
+            # clean the date directory,  otherwise above cmd gets permission denied.
+            cln_cmd = ['ssh', f'{self.ao_user}@{self.ao_server}', 'rmdir',
+                       paths['summit']]
+            utils.run_cmd(cln_cmd, log)
 
         # clean the month directory if empty
         summit_month_path = paths['summit'].rsplit('/', 1)[0]
