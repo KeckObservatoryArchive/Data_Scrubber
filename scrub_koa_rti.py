@@ -7,7 +7,7 @@ import subprocess
 import scrubber_utils as utils
 
 APP_PATH = os.path.abspath(os.path.dirname(__file__))
-CONFIG_FILE = f'{APP_PATH}/scrubber_config.ini'
+CONFIG_FILE = f'{APP_PATH}/scrubber_config.live.ini'
 
 
 class ToDelete:
