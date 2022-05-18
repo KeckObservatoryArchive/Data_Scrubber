@@ -4,6 +4,8 @@ import logging
 import os
 import sys
 from glob import glob
+import pexpect
+import tempfile
 
 import subprocess
 from collections import namedtuple
@@ -31,6 +33,25 @@ def chk_file_exists(file_location, filename=None):
     return os.path.exists(file_location)
 
 
+def glob_file_exists(file_location, filename=None):
+    """
+    Check the existence of the file, ie stage_file:
+        /s/sdata125/hires6/2020nov23/hires0003.fits
+
+    :param file_location: <str> path or path+filename for the file
+    :param filename: <str> filename to add to path
+
+    :return: <bool> does the file exist?
+    """
+    if not file_location:
+        return []
+
+    if filename:
+        file_location = "/".join((file_location, filename))
+
+    return glob(file_location)
+
+
 def send_email(email_msg, mailto, mailfrom, mailserver, subject, log):
     """
     send an email if there are any warnings or errors logged.
@@ -55,7 +76,7 @@ def send_email(email_msg, mailto, mailfrom, mailserver, subject, log):
 
 
 def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None, inst=None,
-                  utd=None, utd2=None, update_val=None, add=None, log=None):
+                  utd=None, utd2=None, update_val=None, add=None, log=None, level=None):
     """
     Query the API to get or update information in the KOA RTI DB.
 
@@ -74,9 +95,10 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None, inst=N
     if qtype not in ['search', 'update']:
         return None
 
-    loc = locals()
     url = f"{url}?{qtype}={type_val}"
 
+    # iterate through all the args passed
+    loc = locals()
     for dict_key, dict_val in loc.items():
         if dict_val and dict_key not in ['url', 'qtype', 'type_val', 'log']:
             url += f"&{dict_key}={dict_val}"
@@ -90,7 +112,17 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None, inst=N
     return results
 
 
-def create_rti_report(args, metrics, move, remove, inst):
+def exists_remote(host, path):
+    cmd = ['ssh', host, 'ls', path]
+    status = subprocess.call(cmd)
+    if status == 0:
+        return True
+    if status == 1:
+        return False
+    raise Exception('SSH failed')
+
+
+def create_rti_report(args, metrics, move, inst):
     """
     Form the report to be emailed at the end of a scrub run.
 
@@ -112,9 +144,8 @@ def create_rti_report(args, metrics, move, remove, inst):
     report += f"\n{metrics['nresults']['mv0'][1]} : verified results to move (lev0)."
     report += f"\n{metrics['nresults']['mv1'][0]} : KOAID in results to move (lev1)."
     report += f"\n{metrics['nresults']['mv1'][1]} : verified results to move (lev1)."
-    if remove:
-        report += f"\n{metrics['nresults']['del0'][0]} : KOAID in sdata results to delete (lev0)."
-        report += f"\n{metrics['nresults']['del0'][1]} : verified sdata results to delete (lev0)."
+    report += f"\n{metrics['nresults']['mv2'][0]} : KOAID in results to move (lev2)."
+    report += f"\n{metrics['nresults']['mv2'][1]} : verified results to move (lev2)."
 
     for val in {'mv0', 'del0', 'mv1'}:
         diff = metrics['nresults'][val][0] - metrics['nresults'][val][1]
@@ -123,12 +154,6 @@ def create_rti_report(args, metrics, move, remove, inst):
             for err in metrics['warnings']:
                 report += f"\n    {err}"
 
-    if remove:
-        header = "Files on Instrument servers"
-        report += f"\n\n{header}" + "\n" + "-" * len(header)
-        report += f"\n{metrics['sdata'][0]} : OFNAME Files found."
-        report += f"\n{metrics['sdata'][1]} : OFNAME Files deleted."
-
     if move:
         header = "Fits Files created by DEP on vm-koarti"
         report += f"\n\n{header}" + "\n" + "-" * len(header)
@@ -136,6 +161,45 @@ def create_rti_report(args, metrics, move, remove, inst):
         report += f"\n{metrics['staged'][1]} : Stage files moved."
 
     report += f"\n\nTotal number of KOAIDs not previously deleted (any status): "
+    report += f"{metrics['total_files']}"
+
+    return report
+
+
+def create_sdata_report(args, metrics, inst):
+    """
+    Form the report to be emailed at the end of a scrub run.
+
+    :param metrics: <dict> the values of files,  moved, removed, total.
+    :return: <str> the report.
+    """
+
+    report = f"\nRTI Data Scrubber Results for {inst.upper()} " \
+             f"{args.utd} to {args.utd2}."
+
+    header = "Totals"
+    report += f"\n\n{header}" + "\n" + "-" * len(header)
+    report += f"\n{metrics['total_sdata_mv']} : Total SDATA files moved."
+
+    header = "Number of results"
+    report += f"\n\n{header}" + "\n" + "-" * len(header)
+
+    report += f"\n{metrics['nresults']['sdata'][0]} : KOAID in sdata results to delete (lev0)."
+    report += f"\n{metrics['nresults']['sdata'][1]} : verified sdata results to delete (lev0)."
+
+    for val in {'sdata'}:
+        diff = metrics['nresults'][val][0] - metrics['nresults'][val][1]
+        if diff > 0:
+            report += f"\n\nErrors: "
+            for err in metrics['warnings']:
+                report += f"\n    {err}"
+
+    header = "Files on Instrument servers"
+    report += f"\n\n{header}" + "\n" + "-" * len(header)
+    report += f"\n{metrics['sdata'][0]} : OFNAME Files found."
+    report += f"\n{metrics['sdata'][1]} : OFNAME Files deleted."
+
+    report += f"\n\nTotal number of SDATA not previously deleted (any status): "
     report += f"{metrics['total_files']}"
 
     return report
@@ -162,6 +226,24 @@ def create_nightly_report(metrics, utd, utd2):
     report += f"\n{diff_mv} : Number of files moved to storage.\n"
 
     return report
+
+
+def run_cmd(cmd, log):
+    """
+    Run a system command.
+
+    :param cmd: <list> the command list ready for subprocess.
+    :param log: <log> the log file pointer.
+    :return: <int> 0 on success,  -1 on error.
+    """
+    try:
+        log.info(f"cmd: {cmd}")
+        subprocess.run(cmd, stdout=subprocess.DEVNULL, check=True)
+    except subprocess.CalledProcessError:
+        log.warning(f"cmd failed: {cmd}")
+        return -1
+
+    return 0
 
 
 def clean_empty_dirs(root_dir, log):
@@ -236,6 +318,7 @@ def create_logger(name, logdir):
     now = datetime.now().strftime('%Y%m')
     log_name = f'{name}_{now}'
     log_fullpath = f'{logdir}/{log_name}.log'
+    print('log', log_fullpath)
     try:
         #Create logger object
         logger = logging.getLogger(log_name)
@@ -261,7 +344,8 @@ def create_logger(name, logdir):
         handler.setFormatter(formatter)
         logger.addHandler(handler)
 
-    except:
+    except Exception as err:
+        print('Failed to create logger: {err}')
         return None, None
 
     return log_name, log_stream
@@ -295,8 +379,6 @@ def parse_args(config):
                         help="End date to process YYYY-MM-DD.")
     parser.add_argument("--inst", type=str, choices=inst_set, required=True,
                         help="Name of instrument to run the scrubber for.")
-    parser.add_argument("--remove", type=int, choices={0, 1}, default=None,
-                        help="remove the DEP processed data.")
 
     return parser.parse_args()
 
@@ -573,3 +655,69 @@ def count_koa_files(args):
         ofiles += len(ofile_list)
 
     return sfiles + ofiles
+
+
+def determine_storage(koaid, config, config_type, level=0, ofname=None):
+    """
+    Find the storage directory from the KOAID.
+
+    :param koaid: <str> <inst>.utd.#####.## (ie: KB.20210116.57436.94)
+    :return: <str> full path to storage directory (including lev0)
+    """
+    id_parts = koaid.split('.')
+    if len(id_parts) != 4:
+        return None
+
+    inst = get_config_param(config, 'inst_prefix', id_parts[0])
+    utd = id_parts[1]
+
+    storage_root = get_config_param(config, config_type, 'storage_root_rti')
+    store_num = get_config_param(config, 'storage_disk', inst)
+    koa_num = get_config_param(config, 'koa_disk', inst)
+    koa_root = get_config_param(config, 'koa_disk', 'path_root')
+
+    storage_path = f"{storage_root}{store_num}/{inst}/"
+
+    # storing stage files
+    if ofname:
+        dirs = ofname.split('/')
+        if 'fits' not in dirs[-1]:
+            return None
+        s_root = '/'.join(dirs[:-1])
+        storage_path += f"stage/{inst}/{utd}/{s_root}"
+
+    # storing lev0 and lev1 files
+    else:
+        storage_path += f"{koa_root}{koa_num}/{utd}/lev{level}/"
+
+    return storage_path
+
+
+def execute_remote_cmd(host, cmd, user, password, timeout=30, bg_run=False):
+    """SSH'es to a host using the supplied credentials and executes a command.
+    Throws an exception if the command doesn't return 0.
+    bgrun: run command in the background"""
+
+    fname = tempfile.mktemp()
+    fout = open(fname, 'w')
+
+    options = '-q -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -oPubkeyAuthentication=no'
+    if bg_run:
+        options += ' -f'
+    ssh_cmd = 'ssh %s@%s %s "%s"' % (user, host, options, cmd)
+    child = pexpect.spawnu(ssh_cmd,timeout=timeout)  # spawnu for Python 3
+    child.expect(['[pP]assword: '])
+    child.sendline(password)
+    child.logfile = fout
+    child.expect(pexpect.EOF)
+    child.close()
+    fout.close()
+
+    fin = open(fname, 'r')
+    stdout = fin.read()
+    fin.close()
+
+    if 0 != child.exitstatus:
+        raise Exception(stdout)
+
+    return stdout

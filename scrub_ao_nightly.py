@@ -132,7 +132,7 @@ class ScrubAO:
             if ret_val != 0:
                 log.warning(f'Error syncing files,  check paths! {paths}')
                 ret_val += ret_val
-                
+
             # TODO need way to deal with .swp files
             # rsync: send_files failed to open "/net/k2aoserver/k2aodata/nightly/21/08/18/.telnet-sc2.log.swp": Permission denied (13)
             # -rw-------  1 k2obsao aodev 16384 Aug 19 23:37 .telnet-sc2.log.swp

@@ -8,7 +8,7 @@ import scrubber_utils as utils
 
 
 APP_PATH = path.abspath(path.dirname(__file__))
-CONFIG_FILE = f'{APP_PATH}/scrubber_config.ini'
+CONFIG_FILE = f'{APP_PATH}/scrubber_config.live.ini'
 
 
 class StoreData:
@@ -73,7 +73,8 @@ class StoreData:
             log.info(f"working on {inst} date: {utd}\n")
 
             for itr, func in enumerate(funcs):
-                self.koa_disk, self.storage_disk = utils.get_locations(inst, config, config_type)
+                self.koa_disk, self.storage_disk = utils.get_locations(
+                    inst, config, config_type)
                 files_path, store_path = func(utd, inst)
 
                 if store_path not in dirs_made:
@@ -83,15 +84,15 @@ class StoreData:
 
                 if itr != len_funcs:
                     self.n_koa_before += utils.count_koa(files_path, log)
-                    self.n_store_before += utils.count_store(user, store_server,
-                                                             store_path, utd, log)
+                    self.n_store_before += utils.count_store(
+                        user, store_server, store_path, utd, log)
 
                 self._rsync_files(files_path, store_path)
 
                 if itr != len_funcs:
                     self.n_koa_after += utils.count_koa(files_path, log)
-                    self.n_store_after += utils.count_store(user, store_server,
-                                                            store_path, utd, log)
+                    self.n_store_after += utils.count_store(
+                        user, store_server, store_path, utd, log)
 
     @staticmethod
     def _rsync_files(files_path, store_path):
