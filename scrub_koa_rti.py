@@ -553,7 +553,7 @@ if __name__ == '__main__':
         metrics['lev1'] = delete_obj.del_mv('lev1', delete_obj.store_lev1_func)
 
     if lev2:
-        metrics['lev2'] = delete_obj.del_mv('lev2', delete_obj.store_lev1_func)
+        metrics['lev2'] = delete_obj.del_mv('lev2', delete_obj.store_lev2_func)
 
     utils.clean_empty_dirs(files_root, log)
     nfiles_after = utils.count_koa_files(args)
