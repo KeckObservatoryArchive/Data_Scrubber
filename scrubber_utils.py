@@ -155,7 +155,7 @@ def create_rti_report(args, metrics, move, inst):
                 report += f"\n    {err}"
 
     if move:
-        header = "Fits Files created by DEP on vm-koarti"
+        header = "Fits Files created by DEP on vm-[k1/k2]koarti"
         report += f"\n\n{header}" + "\n" + "-" * len(header)
         report += f"\n{metrics['staged'][0]} : Stage files found."
         report += f"\n{metrics['staged'][1]} : Stage files moved."
@@ -644,11 +644,11 @@ def count_koa_files(args):
         utd = utd2 - i
 
         sfile_list = [rslt for rslt in
-                      glob(f'/koadata/*/stage/{utd}/**', recursive=True)
+                      glob(f'/koadata/{args.inst}/stage/{utd}/**', recursive=True)
                       if not os.path.isdir(rslt)]
 
         ofile_list = [rslt for rslt in
-                       glob(f'/koadata/*/{utd}/**', recursive=True)
+                       glob(f'/koadata/{args.inst}/{utd}/**', recursive=True)
                        if not os.path.isdir(rslt)]
 
         sfiles += len(sfile_list)

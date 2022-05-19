@@ -19,6 +19,7 @@ class ToDelete:
         self.to_move = self.db_obj.get_files_to_move()
         self.dirs_made = []
         self.lev1_moved = []
+        self.lev2_moved = []
         self.metrics = {'staged': [0, 0], 'koaid': [0, 0],
                         'inst': [0, 0], 'nresults': self.db_obj.get_nresults(),
                         'warnings': self.db_obj.get_warnings()}
@@ -41,12 +42,19 @@ class ToDelete:
         if not file_list:
             return [0, 0]
 
+        nfiles_found = len(file_list)
+
         n_files_touched = 0
         for result in file_list:
-            # rsync will return 1 per file,  when it succeeds
-            n_files_touched += func(result)
+            # rsync will return 1 per file,  when it succeeds, 0 fails,
+            # -1 if file not found
+            ret_val = func(result)
+            if ret_val < 0:
+                nfiles_found += ret_val
+            else:
+                n_files_touched += func(result)
 
-        return [len(file_list), n_files_touched]
+        return [nfiles_found, n_files_touched]
 
     def store_lev0_func(self, result):
         """
@@ -84,13 +92,13 @@ class ToDelete:
 
         if 'lev1' not in mv_path:
             self.log.warning(f"lev1 path format is incorrect: {mv_path}")
-            return 0
+            return -1
 
         log.info('running store lev1')
 
         storage_dir = self.get_storage_dir(koaid, mv_path, level=1)
         if not storage_dir:
-            return 0
+            return -1
 
         if mv_path not in self.lev1_moved:
             return_val = self._rsync_files(mv_path, storage_dir)
@@ -114,17 +122,17 @@ class ToDelete:
 
         if 'lev2' not in mv_path:
             self.log.warning(f"lev2 path format is incorrect: {mv_path}")
-            return 0
+            return -1
 
         log.info('running store lev1')
 
         storage_dir = self.get_storage_dir(koaid, mv_path, level=2)
         if not storage_dir:
-            return 0
+            return -1
 
-        if mv_path not in self.lev1_moved:
+        if mv_path not in self.lev2_moved:
             return_val = self._rsync_files(mv_path, storage_dir)
-            self.lev1_moved.append(mv_path)
+            self.lev2_moved.append(mv_path)
 
         if not self.add_archived_dir(koaid, storage_dir, level=2):
             self.log.warning(f"archive_dir not set for {koaid}")
@@ -223,7 +231,7 @@ class ToDelete:
 
         return True
 
-    def _rsync_files(self, mv_path, storage_dir, koaid=None, log_only=False):
+    def _rsync_files(self, mv_path, storage_dir, koaid=None):
         """
         rsync all the DEP files to bring them to storage.
 
@@ -234,12 +242,12 @@ class ToDelete:
         if not utils.chk_file_exists(mv_path):
             if '.fits' in mv_path and '.gz' not in mv_path:
                 return self._rsync_files(mv_path + '.gz', storage_dir,
-                                         koaid=koaid, log_only=log_only)
+                                         koaid=koaid)
 
             log_str = f'skipping file {mv_path} -- already moved'
             log_str += ' or does not exist.'
             log.info(log_str)
-            return 0
+            return -1
 
         server_str = f"{mv_path}"
         store_loc = f'{user}@{store_server}:{storage_dir}'
@@ -251,11 +259,6 @@ class ToDelete:
         else:
             rsync_cmd = ["rsync", self.rm, "-avz",
                          server_str, store_loc]
-
-
-        if log_only:
-            self.log.info(f"rsync cmd: {rsync_cmd}")
-            return 0
 
         try:
             subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
@@ -294,21 +297,13 @@ class ToDelete:
             s_root = '/'.join(dirs[:-1])
             storage_path += f"stage/{inst}/{utd}/{s_root}"
 
-        # storing lev0 and lev1 files
+        # storing lev0, lev1, lev2 files
         else:
             storage_path += f"{koa_root}{koa_num}/{utd}/lev{level}/"
 
-        return storage_path
+        log.info(f'setting storage path: {storage_path}')
 
-    # @staticmethod
-    # def _chk_inst(inst):
-    #     if exclude_insts and inst in exclude_insts:
-    #         return False
-    #
-    #     if include_insts and inst not in include_insts:
-    #         return False
-    #
-    #     return True
+        return storage_path
 
 
 class ChkArchive:
@@ -392,15 +387,12 @@ class ChkArchive:
         columns = utils.get_config_param(config, 'db_columns', f'lev{level}')
 
         # the database search column / value
-        key = self.status_col
-        val = self.archived_key
-
-        if level:
+        if not level:
+            key = self.status_col
+            val = self.archived_key
+        else:
             key = None
             val = None
-            # search_type = f'LEV{level}'
-        # else:
-        #     search_type = 'GENERAL'
 
         search_type = 'GENERAL'
 
@@ -534,9 +526,9 @@ if __name__ == '__main__':
 
     nfiles_before = utils.count_koa_files(args)
 
-    storage_dir = storage_root + storage_num
-    store_before = utils.count_store(user, store_server,
-                                     f'{storage_dir}', f'{args.inst}/*', log)
+    storage_direct = storage_root + storage_num
+    store_before = utils.count_store(user, store_server, f'{storage_direct}',
+                                     f'{args.inst}/*', log)
 
     log.info(f"Scrubbing data in UT range: {args.utd} to {args.utd2}\n")
     log.info(f"MOVE KOA PROCESSED FILES to storage: {move}")
@@ -555,11 +547,11 @@ if __name__ == '__main__':
 
     utils.clean_empty_dirs(files_root, log)
     nfiles_after = utils.count_koa_files(args)
-    store_after = utils.count_store(user, store_server,
-                                    f'{storage_dir}', f'{args.inst}/*', log)
+    store_after = utils.count_store(user, store_server, f'{storage_direct}',
+                                    f'{args.inst}/*', log)
 
-    log.info(f'Number of KOA FILES before: {nfiles_before}')
-    log.info(f'Number of KOA FILES after: {nfiles_after}')
+    log.info(f'Number of KOA FILES before (these can be off if another scrubber is running): {nfiles_before}')
+    log.info(f'Number of KOA FILES after (these can be off if another scrubber is running): {nfiles_after}')
 
     metrics['total_koa_mv'] = nfiles_before - nfiles_after
     metrics['total_storage_mv'] = store_after - store_before
