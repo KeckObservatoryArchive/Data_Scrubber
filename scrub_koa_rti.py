@@ -486,8 +486,6 @@ class ChkArchive:
 
             if not val and col not in ['status_code', 'archive_dir', 'level']:
                 err = "INCOMPLETE RESULTS"
-            elif col == 'status_code' and val and not result.get('reviewed'):
-                err = f"STATUS CODE: {val}"
             elif col == 'status' and val != self.archived_key:
                 err = f"INVALID STATUS, STATUS must be = {self.archived_key}"
             elif col == 'process_dir' and 'lev' not in val.split('/')[-1]:
