@@ -124,7 +124,7 @@ class ToDelete:
             self.log.warning(f"lev2 path format is incorrect: {mv_path}")
             return -1
 
-        log.info('running store lev1')
+        log.info('starting store lev2')
 
         storage_dir = self.get_storage_dir(koaid, mv_path, level=2)
         if not storage_dir:
@@ -199,7 +199,7 @@ class ToDelete:
         :param koaid: <str> the koaid
         :param archive_path: <str> storage path where files were moved/archived.
         """
-        self.log.info(f"setting archive_dir for: {koaid}")
+        self.log.info(f"setting archive_dir {archive_path} for: {koaid}")
         archive_loc = utils.get_config_param(config, 'db_columns', 'archive_directory')
 
         results = utils.query_rti_api(site, 'update', 'GENERAL', log=log,
@@ -251,6 +251,8 @@ class ToDelete:
 
         server_str = f"{mv_path}"
         store_loc = f'{user}@{store_server}:{storage_dir}'
+
+        log.info(f'rsync files from: {server_str} to: {store_loc}')
 
         if koaid:
             rsync_cmd = ["rsync", self.rm, "-avz", "-e", "ssh",
