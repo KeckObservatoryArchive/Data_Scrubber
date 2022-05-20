@@ -222,7 +222,6 @@ class ToDelete:
             self.log.warning(f"Error: {err}, line: {sys.exc_info()[-1].tb_lineno}")
 
         if results and type(results) == dict and results['success'] == 1:
-            self.log.info(f"{results['data']}")
             self.log.info(f"{column} set for koaid: {koaid}")
         else:
             self.log.warning(f"{column} not set for: {koaid}, "
