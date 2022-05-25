@@ -52,7 +52,7 @@ class ToDelete:
             if ret_val < 0:
                 nfiles_found += ret_val
             else:
-                n_files_touched += func(result)
+                n_files_touched += ret_val
 
         return [nfiles_found, n_files_touched]
 
@@ -70,7 +70,7 @@ class ToDelete:
         if not storage_dir:
             return 0
 
-        log.info('running store lev0')
+        log.info(f'running store lev0,  storage dir {storage_dir}')
 
         return_val = self._rsync_files(mv_path, storage_dir, koaid)
 
@@ -94,11 +94,11 @@ class ToDelete:
             self.log.warning(f"lev1 path format is incorrect: {mv_path}")
             return -1
 
-        log.info('running store lev1')
-
         storage_dir = self.get_storage_dir(koaid, mv_path, level=1)
         if not storage_dir:
             return -1
+
+        log.info(f'running store lev1,  storage dir {storage_dir}')
 
         if mv_path not in self.lev1_moved:
             return_val = self._rsync_files(mv_path, storage_dir)
@@ -124,11 +124,11 @@ class ToDelete:
             self.log.warning(f"lev2 path format is incorrect: {mv_path}")
             return -1
 
-        log.info('starting store lev2')
-
         storage_dir = self.get_storage_dir(koaid, mv_path, level=2)
         if not storage_dir:
             return -1
+
+        log.info(f'running store lev2,  storage dir {storage_dir}')
 
         if mv_path not in self.lev2_moved:
             return_val = self._rsync_files(mv_path, storage_dir)
