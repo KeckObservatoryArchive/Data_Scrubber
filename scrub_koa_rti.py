@@ -168,7 +168,8 @@ class ToDelete:
         :param ofname: <str> ofname (koa_status table)
         :return: <str/list> storage directory (or None) and list of storage dirs
         """
-        storage_dir = self.determine_storage(koaid, ofname=ofname, level=level)
+        storage_dir = utils.determine_storage(koaid, config, config_type,
+                                              ofname=ofname, level=level)
 
         if not storage_dir:
             self.log.warning("Could not determine storage path!")
@@ -252,6 +253,7 @@ class ToDelete:
         store_loc = f'{user}@{store_server}:{storage_dir}'
 
         log.info(f'rsync files from: {server_str} to: {store_loc}')
+        log.info(f'koaid: {koaid}')
 
         if koaid:
             rsync_cmd = ["rsync", self.rm, "-avz", "-e", "ssh",
@@ -261,6 +263,8 @@ class ToDelete:
             rsync_cmd = ["rsync", self.rm, "-avz",
                          server_str, store_loc]
 
+        log.info(f'rsync cmd: {rsync_cmd}')
+
         try:
             subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
         except subprocess.CalledProcessError:
@@ -268,44 +272,6 @@ class ToDelete:
             return 0
 
         return 1
-
-    @staticmethod
-    def determine_storage(koaid, level=0, ofname=None):
-        """
-        Find the storage directory from the KOAID.
-
-        :param koaid: <str> <inst>.utd.#####.## (ie: KB.20210116.57436.94)
-        :return: <str> full path to storage directory (including lev0)
-        """
-        id_parts = koaid.split('.')
-        if len(id_parts) != 4:
-            return None
-
-        inst = utils.get_config_param(config, 'inst_prefix', id_parts[0])
-        utd = id_parts[1]
-
-        store_num = utils.get_config_param(config, 'storage_disk', inst)
-        koa_num = utils.get_config_param(config, 'koa_disk', inst)
-        koa_root = utils.get_config_param(config, 'koa_disk', 'path_root')
-
-        storage_path = f"{storage_root}{store_num}/{inst}/"
-
-        # storing stage files
-        if ofname:
-            dirs = ofname.split('/')
-            if 'fits' not in dirs[-1]:
-                return None
-            s_root = '/'.join(dirs[:-1])
-            storage_path += f"stage/{inst}/{utd}/{s_root}"
-
-        # storing lev0, lev1, lev2 files
-        else:
-            storage_path += f"{koa_root}{koa_num}/{utd}/lev{level}/"
-
-        log.info(f'setting storage path: {storage_path}')
-
-        return storage_path
-
 
 class ChkArchive:
     def __init__(self, inst):
