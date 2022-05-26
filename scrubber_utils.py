@@ -177,10 +177,6 @@ def create_sdata_report(args, metrics, inst):
     report = f"\nRTI Data Scrubber Results for {inst.upper()} " \
              f"{args.utd} to {args.utd2}."
 
-    header = "Totals"
-    report += f"\n\n{header}" + "\n" + "-" * len(header)
-    report += f"\n{metrics['total_sdata_mv']} : Total SDATA files moved."
-
     header = "Number of results"
     report += f"\n\n{header}" + "\n" + "-" * len(header)
 
