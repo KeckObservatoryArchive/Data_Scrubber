@@ -143,7 +143,7 @@ class ToDelete:
         log.info(f'remote command: {server} {cmd} {account} {pw} {mv_path_remote}')
 
         # TODO this was diabled for testing
-        # utils.execute_remote_cmd(server, cmd, account, pw)
+        utils.execute_remote_cmd(server, cmd, account, pw)
 
         # check that it was removed
         if utils.chk_file_exists(mv_path):
@@ -418,7 +418,7 @@ if __name__ == '__main__':
         metrics['sdata'] = delete_obj.rm_sdata_files(sdata_files)
 
     # TODO TBD if this is required.
-    utils.clean_empty_dirs(files_root, log)
+    # utils.clean_empty_dirs(files_root, log)
 
     # count files after
     nfiles_after = utils.count_koa(mv_path, log)
