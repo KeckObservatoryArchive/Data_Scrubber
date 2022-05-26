@@ -126,14 +126,24 @@ class ToDelete:
             return 0
 
         acnt_numb = account.strip(inst).zfill(2)
-        pw = f"{numbered_prefix}{acnt_numb}{numbered_suffix}"
+        try:
+            int(acnt_numb)
+            pw = f"{numbered_prefix}{acnt_numb}{numbered_suffix}"
+        except ValueError:
+            if 'eng' in account.split(inst):
+                pw = eng_pw
+            else:
+                log.warning('could not determine the password from path: {mv_path_remote}')
+                return 0
 
         if not pw:
             return 0
 
         cmd = f'/bin/rm {mv_path_remote}'
         log.info(f'remote command: {server} {cmd} {account} {pw} {mv_path_remote}')
-        utils.execute_remote_cmd(server, cmd, account, pw)
+
+        # TODO this was diabled for testing
+        # utils.execute_remote_cmd(server, cmd, account, pw)
 
         # check that it was removed
         if utils.chk_file_exists(mv_path):
@@ -322,10 +332,9 @@ class ChkArchive:
                 break
             val = result.get(col)
 
-            if not val and col not in ['status_code', 'archive_dir', 'source_deleted']:
+            if not val and col not in ['status_code', 'archive_dir',
+                                       'source_deleted']:
                 err = "INCOMPLETE RESULTS"
-            elif col == 'status_code' and val and not result.get('reviewed'):
-                err = f"STATUS CODE: {val}"
             elif col == 'status' and val != archived_key:
                 err = f"INVALID STATUS, STATUS must be = {archived_key}"
             elif col == 'process_dir' and 'lev' not in val.split('/')[-1]:
@@ -363,11 +372,12 @@ if __name__ == '__main__':
     store_server = utils.get_config_param(config, config_type, 'store_server')
 
     deleted_col = utils.get_config_param(config, 'db_columns', 'deleted')
-    archived_key = utils.get_config_param(config, 'db_columns', 'archived')
+    archived_key = utils.get_config_param(config, 'archive', 'archived')
     status_col = utils.get_config_param(config, 'db_columns', 'status')
 
     numbered_prefix = utils.get_config_param(config, 'passwords', 'numbered_prefix')
     numbered_suffix = utils.get_config_param(config, 'passwords', 'numbered_suffix')
+    eng_pw = utils.get_config_param(config, 'passwords', 'eng_account')
 
     inst_root = utils.get_config_param(config, 'inst_disk', 'path_root')
     inst_comp = utils.get_config_param(config, 'inst_disk', args.inst)
@@ -408,7 +418,7 @@ if __name__ == '__main__':
         metrics['sdata'] = delete_obj.rm_sdata_files(sdata_files)
 
     # TODO TBD if this is required.
-    # utils.clean_empty_dirs(files_root, log)
+    utils.clean_empty_dirs(files_root, log)
 
     # count files after
     nfiles_after = utils.count_koa(mv_path, log)

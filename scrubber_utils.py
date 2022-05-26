@@ -358,8 +358,8 @@ def parse_args(config):
     :return: <obj> commandline arguments
     """
     now = datetime.now()
-    start = int(get_config_param(config, 'TIMEFRAME', 'start'))
-    end = int(get_config_param(config, 'TIMEFRAME', 'end'))
+    # start = int(get_config_param(config, 'TIMEFRAME', 'start'))
+    # end = int(get_config_param(config, 'TIMEFRAME', 'end'))
 
     insts = get_config_param(config, 'inst_list', 'insts')
     insts = f'{insts}, {insts.lower()}'
@@ -371,14 +371,24 @@ def parse_args(config):
                         help="Only log the commands,  do not execute")
     parser.add_argument("--logdir", type=str,
                         help="Define the directory for the log.")
+    parser.add_argument("--inst", type=str, choices=inst_set, required=True,
+                        help="Name of instrument to run the scrubber for.")
+
+    # add inst specific start/end ndays from the config if exist
+    args = parser.parse_args()
+    try:
+        start = int(get_config_param(config, 'TIMEFRAME', f'{args.inst}_start'))
+        end = int(get_config_param(config, 'TIMEFRAME', f'{args.inst}_end'))
+    except:
+        start = int(get_config_param(config, 'TIMEFRAME', 'start'))
+        end = int(get_config_param(config, 'TIMEFRAME', 'end'))
+
     parser.add_argument("--utd", type=str,
                         default=(now - timedelta(days=start)).strftime('%Y-%m-%d'),
                         help="Start date to process YYYY-MM-DD.")
     parser.add_argument("--utd2", type=str,
                         default=(now - timedelta(days=end)).strftime('%Y-%m-%d'),
                         help="End date to process YYYY-MM-DD.")
-    parser.add_argument("--inst", type=str, choices=inst_set, required=True,
-                        help="Name of instrument to run the scrubber for.")
 
     return parser.parse_args()
 
@@ -704,8 +714,10 @@ def execute_remote_cmd(host, cmd, user, password, timeout=30, bg_run=False):
     options = '-q -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -oPubkeyAuthentication=no'
     if bg_run:
         options += ' -f'
+
     ssh_cmd = 'ssh %s@%s %s "%s"' % (user, host, options, cmd)
-    child = pexpect.spawnu(ssh_cmd,timeout=timeout)  # spawnu for Python 3
+
+    child = pexpect.spawnu(ssh_cmd, timeout=timeout)  # spawnu for Python 3
     child.expect(['[pP]assword: '])
     child.sendline(password)
     child.logfile = fout
