@@ -318,7 +318,6 @@ def create_logger(name, logdir):
     now = datetime.now().strftime('%Y%m')
     log_name = f'{name}_{now}'
     log_fullpath = f'{logdir}/{log_name}.log'
-    print('log', log_fullpath)
     try:
         #Create logger object
         logger = logging.getLogger(log_name)
