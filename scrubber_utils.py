@@ -348,7 +348,7 @@ def create_logger(name, logdir):
         print('Failed to create logger: {err}')
         return None, None
 
-    return log_name, log_stream
+    return f'{log_name}.log', log_stream
 
 
 def parse_args(config):
