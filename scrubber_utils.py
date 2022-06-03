@@ -353,8 +353,6 @@ def parse_args(config):
     :return: <obj> commandline arguments
     """
     now = datetime.now()
-    # start = int(get_config_param(config, 'TIMEFRAME', 'start'))
-    # end = int(get_config_param(config, 'TIMEFRAME', 'end'))
 
     insts = get_config_param(config, 'inst_list', 'insts')
     insts = f'{insts}, {insts.lower()}'

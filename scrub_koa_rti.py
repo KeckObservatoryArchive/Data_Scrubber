@@ -517,8 +517,8 @@ if __name__ == '__main__':
     store_after = utils.count_store(user, store_server, f'{storage_direct}',
                                     f'{args.inst}/*', log)
 
-    log.info(f'Number of KOA FILES before (these can be off if another scrubber is running): {nfiles_before}')
-    log.info(f'Number of KOA FILES after (these can be off if another scrubber is running): {nfiles_after}')
+    log.info(f'Number of KOA FILES before: {nfiles_before}')
+    log.info(f'Number of KOA FILES after: {nfiles_after}')
 
     metrics['total_koa_mv'] = nfiles_before - nfiles_after
     metrics['total_storage_mv'] = store_after - store_before

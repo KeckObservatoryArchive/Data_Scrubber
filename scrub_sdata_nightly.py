@@ -122,6 +122,11 @@ class ToDelete:
                 account = direct
 
         if not account:
+            for direct in mv_path_remote.split('/'):
+                if 'eng' in direct and 'fits' not in direct:
+                    account = direct
+
+        if not account:
             log.error(f'could not determine the account from: {mv_path_remote}')
             return 0
 
@@ -132,8 +137,10 @@ class ToDelete:
         except ValueError:
             if 'eng' in account.split(inst):
                 pw = eng_pw
+            elif 'eng' in account:
+                pw = eng_pw
             else:
-                log.warning('could not determine the password from path: {mv_path_remote}')
+                log.warning(f'could not determine the password from path: {mv_path_remote}')
                 return 0
 
         if not pw:
