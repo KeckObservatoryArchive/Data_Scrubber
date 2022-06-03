@@ -708,7 +708,7 @@ def execute_remote_cmd(host, cmd, user, password, timeout=30, bg_run=False):
     if bg_run:
         options += ' -f'
 
-    ssh_cmd = 'ssh %s@%s %s "%s"' % (user, host, options, cmd)
+    ssh_cmd = 'ssh -c 3des-cbc %s@%s %s "%s"' % (user, host, options, cmd)
 
     child = pexpect.spawnu(ssh_cmd, timeout=timeout)  # spawnu for Python 3
     child.expect(['[pP]assword: '])
