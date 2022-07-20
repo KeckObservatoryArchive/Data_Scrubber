@@ -1,4 +1,6 @@
 import requests
+from requests.exceptions import HTTPError
+
 import argparse
 import logging
 import os
@@ -91,7 +93,6 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None, inst=N
     :param utd2: <str> the final date, YYYY-MM-DD.
     :return:
     """
-
     if qtype not in ['search', 'update']:
         return None
 
@@ -103,7 +104,11 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None, inst=N
         if dict_val and dict_key not in ['url', 'qtype', 'type_val', 'log']:
             url += f"&{dict_key}={dict_val}"
 
-    response = requests.get(url)
+    try:
+        response = requests.get(url)
+    except HTTPError as err:
+        log.warning(err.response.text)
+
     results = response.content
 
     if log:

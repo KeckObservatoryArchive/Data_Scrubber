@@ -115,7 +115,8 @@ class ToDelete:
             log.info(log_str)
             return 0
 
-        inst = args.inst.lower()
+        inst_name = args.inst.upper()
+        inst = utils.get_config_param(config, 'accounts', inst_name).lower()
         account = None
         for direct in mv_path_remote.split('/'):
             if inst in direct and 'fits' not in direct:
@@ -440,7 +441,7 @@ if __name__ == '__main__':
     log.info(report)
 
     utils.write_emails(config, report, log, errors=delete_obj.db_obj.get_errors(),
-                       prefix='SDATA')
+                       prefix=f'{args.inst} SDATA')
 
 
 
