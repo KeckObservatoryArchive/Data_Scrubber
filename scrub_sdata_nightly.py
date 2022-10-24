@@ -58,7 +58,7 @@ class ToDelete:
             return 0
 
         # strip the leading /s for /s/sdata...
-        mv_path_local = f"{inst_root}{inst_comp}/{ofname[2:]}"
+        mv_path_local = ofname
         mv_path_remote = f"{ofname[2:]}"
 
         moved = self._rm_files(mv_path_local, mv_path_remote)
@@ -150,8 +150,12 @@ class ToDelete:
         cmd = f'/bin/rm {mv_path_remote}'
         log.info(f'remote command: {server} {cmd} {account} {pw} {mv_path_remote}')
 
-        # TODO this was diabled for testing
-        utils.execute_remote_cmd(server, cmd, account, pw)
+        # TODO disable this for testing
+        try:
+            utils.execute_remote_cmd(server, cmd, account, pw)
+        except Exception as err:
+            self.log.warning(f'exception in executing remote command: {err}')
+            self.log.warning(f'error with command: {server} {cmd} {account} {pw}')
 
         # check that it was removed
         if utils.chk_file_exists(mv_path):
@@ -259,6 +263,7 @@ class ChkArchive:
         self.nresults[cmd_type][0] = len(archived_data)
 
         archived_data = self.verify_db_results(archived_data, columns)
+
         if archived_data:
             self.nresults[cmd_type][1] = len(archived_data)
             d_after = [dat['koaid'] for dat in archived_data]
@@ -318,6 +323,12 @@ class ChkArchive:
                     self.errors_dict[err_msg] = [koaid]
 
                 self.log.warning(f"ERROR: {err_msg} for {result}")
+                continue
+
+            # skip files with paths that include the 'path_exclude' string
+            if path_exclude and path_exclude in result['ofname']:
+                log_str = f"skipping {result['ofname']} -- contains: {path_exclude}."
+                log.info(log_str)
                 continue
 
             filter_data.append(result)
@@ -385,6 +396,12 @@ if __name__ == '__main__':
 
     numbered_prefix = utils.get_config_param(config, 'passwords', 'numbered_prefix')
     numbered_suffix = utils.get_config_param(config, 'passwords', 'numbered_suffix')
+
+    try:
+        path_exclude = utils.get_config_param(config, 'path_exclude', args.inst)
+    except:
+        path_exclude = None
+
     eng_pw = utils.get_config_param(config, 'passwords', 'eng_account')
 
     inst_root = utils.get_config_param(config, 'inst_disk', 'path_root')
@@ -403,6 +420,7 @@ if __name__ == '__main__':
     print(f'writing log to: {log_dir}/{log_name}')
 
     log.info(f"Scrubbing sdata in UT range: {args.utd} to {args.utd2}\n")
+    log.info(f"Avoiding paths with: {path_exclude}")
 
     delete_obj = ToDelete(args.inst)
     metrics = delete_obj.get_metrics()
