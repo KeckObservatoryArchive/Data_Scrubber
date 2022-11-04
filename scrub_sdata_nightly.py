@@ -3,7 +3,6 @@ import sys
 import configparser
 import logging
 import json
-import subprocess
 import scrubber_utils as utils
 
 APP_PATH = os.path.abspath(os.path.dirname(__file__))
@@ -118,10 +117,13 @@ class ToDelete:
         inst_name = args.inst.upper()
         inst = utils.get_config_param(config, 'accounts', inst_name).lower()
         account = None
+
+        # look for inst name (defined in config) in the path
         for direct in mv_path_remote.split('/'):
             if inst in direct and 'fits' not in direct:
                 account = direct
 
+        # if account not found,  check for eng accounts
         if not account:
             for direct in mv_path_remote.split('/'):
                 if 'eng' in direct and 'fits' not in direct:
