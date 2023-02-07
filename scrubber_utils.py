@@ -32,7 +32,23 @@ def chk_file_exists(file_location, filename=None):
     if filename:
         file_location = "/".join((file_location, filename))
 
+    if '*' in file_location:
+        return check_for_files_wildcard(file_location)
+
     return os.path.exists(file_location)
+
+
+def check_for_files_wildcard(filepath):
+    """
+    Use for a filepath or filename that includes a wildcard '*'
+    :param filepath:
+    :return:
+    """
+    for filepath_object in glob(filepath):
+        if os.path.isfile(filepath_object):
+            return True
+
+    return False
 
 
 def glob_file_exists(file_location, filename=None):
@@ -345,7 +361,7 @@ def create_logger(name, logdir):
         logger.addHandler(handler)
 
     except Exception as err:
-        print('Failed to create logger: {err}')
+        print(f'Failed to create logger: {err}')
         return None, None
 
     return f'{log_name}.log', log_stream
@@ -374,9 +390,10 @@ def parse_args(config):
 
     # add inst specific start/end ndays from the config if exist
     args = parser.parse_args()
+
     try:
-        start = int(get_config_param(config, 'TIMEFRAME', f'{args.inst}_start'))
-        end = int(get_config_param(config, 'TIMEFRAME', f'{args.inst}_end'))
+        start = int(get_config_param(config, 'TIMEFRAME', f'{args.inst.lower()}_start'))
+        end = int(get_config_param(config, 'TIMEFRAME', f'{args.inst.lower()}_end'))
     except:
         start = int(get_config_param(config, 'TIMEFRAME', 'start'))
         end = int(get_config_param(config, 'TIMEFRAME', 'end'))
@@ -575,7 +592,7 @@ def count_koa(files_path, log):
     return n_koa
 
 
-def count_store(user, store_server, store_path, utd, log):
+def count_store(user, store_server, store_path, inst, log):
     """
     Count the files on the remote storage server.
 
@@ -589,7 +606,7 @@ def count_store(user, store_server, store_path, utd, log):
     """
     n_store = 0
     cmd = ['ssh', f'{user}@{store_server}', 'find',
-           f'{store_path}/{utd}/', '-type', 'f', '|', 'wc', '-l']
+           f'{store_path}/{inst}/', '-type', 'f', '|', 'wc', '-l']
 
     try:
         n_store = int(subprocess.check_output(cmd).decode('utf-8'))
@@ -597,7 +614,7 @@ def count_store(user, store_server, store_path, utd, log):
         log.warning(f'Error: {err} line: {sys.exc_info()[-1].tb_lineno}')
         log.warning(f'Could not count files for: {store_path}')
 
-    log.info(f"{n_store} : files at {store_server}:{store_path}/{utd}")
+    log.info(f"{n_store} : files at {store_server}:{store_path}/{inst}")
 
     return n_store
 
