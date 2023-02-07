@@ -102,14 +102,28 @@ class ToDelete:
 
         return True
 
-    def _rm_files(self, mv_path_local, mv_path_remote):
+    def _rm_files(self, mv_path_local, mv_path_remote, directory=False):
         """
         remove sdata files
 
-        :param koaid: <str> the koaid used to find the files.
-        :param mv_path: <str> thef archive path or the DEP files.
+        :param mv_path_local: <str> the /s/sdata... fullpath including filename
+        :param mv_path_remote: <str> the remote /sdata... fullpath including filename
         :param log_only:
         """
+
+        # check for executedMasks directory
+        if not directory and 'mosfire' in mv_path_local:
+            exc_path_remote = mv_path_remote.rsplit('/', 1)[0]
+            exc_path_local = mv_path_local.rsplit('/', 1)[0]
+            if not exc_path_remote or not exc_path_local:
+                return 0
+
+            exc_path_remote += '/executedMasks'
+            exc_path_local += '/executedMasks'
+
+            self._rm_files(exc_path_local, exc_path_remote, directory=True)
+
+        # check that the file exists
         if not utils.chk_file_exists(mv_path_local):
             log_str = f'skipping {mv_path_local} -- moved or does not exist.'
             log.info(log_str)
@@ -147,7 +161,11 @@ class ToDelete:
         if not pw:
             return 0
 
-        cmd = f'/bin/rm {mv_path_remote}'
+        if directory:
+            cmd = f'/bin/rm -r {mv_path_remote}'
+        else:
+            cmd = f'/bin/rm {mv_path_remote}'
+
         log.info(f'remote command: {server} {cmd} {account} {pw} {mv_path_remote}')
 
         # TODO this was diabled for testing
