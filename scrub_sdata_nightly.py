@@ -423,7 +423,10 @@ if __name__ == '__main__':
     eng_pw = utils.get_config_param(config, 'passwords', 'eng_account')
 
     inst_root = utils.get_config_param(config, 'inst_disk', 'path_root')
-    inst_comp = utils.get_config_param(config, 'inst_disk', args.inst)
+    try:
+        inst_comp = utils.get_config_param(config, 'inst_disk', args.inst)
+    except:
+        inst_comp = None
 
     server_user = utils.get_config_param(config, 'accounts', args.inst)
     server = utils.get_config_param(config, 'servers', args.inst)
@@ -447,10 +450,19 @@ if __name__ == '__main__':
     if not sdata_files:
         exit("No files found to remove.")
 
+    #TODO remove if not needed.
+    # if inst_comp:
+    #     try:
+    #         ofname = sdata_files[0]['ofname']
+    #         mv_path = f"{inst_root}{inst_comp}/{ofname[2:]}"
+    #     except (TypeError, KeyError, IndexError):
+    #         mv_path = None
+    # else:
+    #     mv_path = sdata_files[0]['ofname']
+
     try:
-        ofname = sdata_files[0]['ofname']
-        mv_path = f"{inst_root}{inst_comp}/{ofname[2:]}"
-    except (TypeError, KeyError, IndexError):
+        mv_path = sdata_files[0]['ofname']
+    except:
         mv_path = None
 
     if mv_path:
