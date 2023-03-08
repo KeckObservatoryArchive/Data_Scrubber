@@ -102,7 +102,7 @@ class ToDelete:
 
         return True
 
-    def _rm_files(self, mv_path_local, mv_path_remote, directory=False):
+    def _rm_files(self, mv_path_local, mv_path_remote, directory=False, recurse=False):
         """
         remove sdata files
 
@@ -161,10 +161,34 @@ class ToDelete:
         if not pw:
             return 0
 
+        if inst_name == 'KPF':
+            pw = eng_pw
+
+        # temporary for KPF
+        if inst_name == 'KPF' and not recurse:
+            files_to_remove = utils.kpf_component_files(mv_path_local,
+                                                        mv_path_remote, log)
+            if files_to_remove:
+                for mv_path in files_to_remove:
+                    storage_root = '/s/sdata1701'
+                    storage_dir = mv_path.replace(storage_root, '/instr1/KPF')
+
+                    log.info(f'component files: {mv_path} storage: {storage_dir}')
+                    if not utils.exists_remote(f'{user}@{store_server}', storage_dir):
+                        log.error(f'data not on storage: {storage_dir} data: {mv_path}')
+                        return False
+
+                    mv_path_remote = '/' + mv_path.split('/s/')[-1]
+                    self._rm_files(mv_path, mv_path_remote, recurse=True)
+
+
         if directory:
             cmd = f'/bin/rm -r {mv_path_remote}'
         else:
             cmd = f'/bin/rm {mv_path_remote}'
+
+        # TODO for testing
+        # cmd = f'/bin/ls {mv_path_remote}'
 
         log.info(f'remote command: {server} {cmd} {account} {pw} {mv_path_remote}')
 
@@ -176,10 +200,11 @@ class ToDelete:
             self.log.warning(f'error with command: {server} {cmd} {account} {pw}')
 
         # check that it was removed
-        if utils.chk_file_exists(mv_path):
-            self.log.error(f"File not removed,  check path: {mv_path}")
+        if utils.chk_file_exists(mv_path_remote):
+            self.log.error(f"File not removed,  check path: {mv_path_remote}")
             return 0
 
+        self.log.error(f"File removed from: {mv_path_remote}")
         return 1
 
 

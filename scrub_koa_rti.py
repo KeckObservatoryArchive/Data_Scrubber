@@ -6,6 +6,9 @@ import json
 import subprocess
 import scrubber_utils as utils
 
+#temporary for KPF
+# from datetime import datetime
+
 APP_PATH = os.path.abspath(os.path.dirname(__file__))
 CONFIG_FILE = f'{APP_PATH}/scrubber_config.live.ini'
 
@@ -77,7 +80,41 @@ class ToDelete:
         if not self.add_archived_dir(koaid, storage_dir, level=0):
             self.log.warning(f"archive_dir not set for {koaid}")
 
+        log.info('running store stage')
+
+        # TODO temporarily store component files for KPF
+        ofname = result['ofname']
+        if args.inst == 'KPF' and 'L0' in ofname:
+            storage_root = '/s/sdata1701'
+            storage_dir = ofname.replace(storage_root, '/instr1/KPF')
+            storage_dir = storage_dir.split('L0')[0]
+
+            # make directory if it doesn't exist
+            utils.make_remote_dir('koaadmin@storageserver', storage_dir, log)
+
+            kpf_components = utils.kpf_component_files(ofname, storage_dir, log)
+            if kpf_components:
+                # copy, don't remove the files
+                orig_rm = self.rm
+                self.rm = ''
+                for mv_path in kpf_components:
+                    component_name = mv_path.split('/')[-2]
+                    storage_now = f'{storage_dir}/{component_name}/'
+                    if not utils.exists_remote('koaadmin@storageserver', storage_now):
+                        utils.make_remote_dir('koaadmin@storageserver', storage_now, log)
+                    log.info(f'component directories {mv_path} {storage_now}')
+                    self._rsync_files(mv_path, storage_now)
+
+                # copy the L0 file as well
+                storage_now = f'{storage_dir}/L0/'
+                if not utils.exists_remote('koaadmin@storageserver', storage_now):
+                    utils.make_remote_dir('koaadmin@storageserver', storage_now, log)
+                self._rsync_files(ofname, storage_now)
+
+                self.rm = orig_rm
+
         return return_val
+
 
     def store_lev1_func(self, result):
         """
@@ -154,8 +191,6 @@ class ToDelete:
         storage_dir = self.get_storage_dir(koaid, mv_path, ofname=ofname)
         if not storage_dir:
             return 0
-
-        log.info('running store stage')
 
         return self._rsync_files(mv_path, storage_dir)
 
@@ -259,9 +294,10 @@ class ToDelete:
             rsync_cmd = ["rsync", self.rm, "-avz", "-e", "ssh",
                          "--include", f"{koaid}*",
                          "--exclude", "*", f"{server_str}/", store_loc]
+        elif '.fits' in server_str:
+            rsync_cmd = ["rsync", self.rm, "-vz", server_str, store_loc]
         else:
-            rsync_cmd = ["rsync", self.rm, "-avz",
-                         server_str, store_loc]
+            rsync_cmd = ["rsync", self.rm, "-avz", server_str, store_loc]
 
         log.info(f'rsync cmd: {rsync_cmd}')
 
@@ -291,6 +327,7 @@ class ChkArchive:
         if move:
             self.to_move = self.file_list(args.utd, args.utd2, inst,
                                           "ARCHIVE_DIR IS NULL", 'mv')
+                                          # "ARCHIVE_DIR IS NULL", 'mv')
         if lev1:
             self.move_lev1 = self.file_list(
                 args.utd, args.utd2, inst, "ARCHIVE_DIR IS NULL", 'mv', level=1)

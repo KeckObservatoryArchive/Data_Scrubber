@@ -9,6 +9,8 @@ from glob import glob
 import pexpect
 import tempfile
 
+from astropy.io import fits
+
 import subprocess
 from collections import namedtuple
 
@@ -136,9 +138,12 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None, inst=N
 def exists_remote(host, path):
     cmd = ['ssh', host, 'ls', path]
     status = subprocess.call(cmd)
+
     if status == 0:
         return True
     if status == 1:
+        return False
+    if status == 2:
         return False
     raise Exception('SSH failed')
 
@@ -389,7 +394,7 @@ def parse_args(config):
                         help="Name of instrument to run the scrubber for.")
 
     # add inst specific start/end ndays from the config if exist
-    # args = parser.parse_args()
+    args = parser.parse_args()
 
     try:
         start = int(get_config_param(config, 'TIMEFRAME', f'{args.inst.lower()}_start'))
@@ -730,7 +735,13 @@ def execute_remote_cmd(host, cmd, user, password, timeout=30, bg_run=False):
     if bg_run:
         options += ' -f'
 
-    ssh_cmd = 'ssh -c 3des-cbc %s@%s %s "%s"' % (user, host, options, cmd)
+    # ssh_cmd = 'ssh -c 3des-cbc %s@%s %s "%s"' % (user, host, options, cmd)
+    if host == 'kpfserver':
+        cipher = 'aes128-ctr'
+    else:
+        cipher = '3des-cbc'
+
+    ssh_cmd = 'ssh -c %s %s@%s %s "%s"' % (cipher, user, host, options, cmd)
 
     child = pexpect.spawnu(ssh_cmd, timeout=timeout)  # spawnu for Python 3
     child.expect(['[pP]assword: '])
@@ -748,3 +759,25 @@ def execute_remote_cmd(host, cmd, user, password, timeout=30, bg_run=False):
         raise Exception(stdout)
 
     return stdout
+
+
+def kpf_component_files(mv_path_local, mv_path_remote, log):
+    log.info(f'kpf_component_files: {mv_path_local} {mv_path_remote}')
+    hdu = fits.open(mv_path_local, ignore_missing_end=True)
+    hdr = hdu[0].header
+
+    files_to_remove = []
+    if 'GREENFN' in hdr:
+        log.info(f"GREEN filename: {hdr['GREENFN']}")
+        files_to_remove.append(hdr['GREENFN'])
+    if 'REDFN' in hdr:
+        log.info(f"RED filename: {hdr['REDFN']}")
+        files_to_remove.append(hdr['REDFN'])
+    if 'CA_HKFN' in hdr:
+        log.info(f"CA_HK filename: {hdr['CA_HKFN']}")
+        files_to_remove.append(hdr['CA_HKFN'])
+    if 'EXPMETERFN' in hdr:
+        log.info(f"Exposure Meter filename: {hdr['EXPMETERFN']}")
+        files_to_remove.append(hdr['EXPMETERFN'])
+
+    return files_to_remove
