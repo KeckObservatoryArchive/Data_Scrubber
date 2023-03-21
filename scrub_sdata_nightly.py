@@ -178,8 +178,8 @@ class ToDelete:
                         log.error(f'data not on storage: {storage_dir} data: {mv_path}')
                         return False
 
-                    mv_path_remote = '/' + mv_path.split('/s/')[-1]
-                    self._rm_files(mv_path, mv_path_remote, recurse=True)
+                    mv_path_remote_new = '/' + mv_path.split('/s/')[-1]
+                    self._rm_files(mv_path, mv_path_remote_new, recurse=True)
 
 
         if directory:
@@ -199,12 +199,12 @@ class ToDelete:
             self.log.warning(f'exception in executing remote command: {err}')
             self.log.warning(f'error with command: {server} {cmd} {account} {pw}')
 
-        # check that it was removed
-        if utils.chk_file_exists(mv_path_remote):
+        # check that it was removed locally (with /s)
+        if utils.chk_file_exists(mv_path_local):
             self.log.error(f"File not removed,  check path: {mv_path_remote}")
             return 0
 
-        self.log.error(f"File removed from: {mv_path_remote}")
+        self.log.info(f"File removed from: {mv_path_remote}")
         return 1
 
 
