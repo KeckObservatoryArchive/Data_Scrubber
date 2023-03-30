@@ -37,6 +37,9 @@ def chk_file_exists(file_location, filename=None):
     if '*' in file_location:
         return check_for_files_wildcard(file_location)
 
+    if type(file_location) != str:
+        return False
+
     return os.path.exists(file_location)
 
 
@@ -137,7 +140,10 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None, inst=N
 
 def exists_remote(host, path):
     cmd = ['ssh', host, 'ls', path]
-    status = subprocess.call(cmd)
+    try:
+        status = subprocess.call(cmd)
+    except Exception as err:
+        return False
 
     if status == 0:
         return True
@@ -145,6 +151,7 @@ def exists_remote(host, path):
         return False
     if status == 2:
         return False
+
     raise Exception('SSH failed')
 
 
@@ -781,3 +788,44 @@ def kpf_component_files(mv_path_local, mv_path_remote, log):
         files_to_remove.append(hdr['EXPMETERFN'])
 
     return files_to_remove
+
+
+def kpf_component_dirs(mv_path_local, mv_path_remote, log):
+    log.info(f'kpf_component_dirs: {mv_path_local} {mv_path_remote}')
+    try:
+        hdu = fits.open(mv_path_local, ignore_missing_end=True)
+        hdr = hdu[0].header
+    except FileNotFoundError:
+        return None
+
+    if 'GREENFN' in hdr:
+        direct = get_kpf_compdir(hdr, 'GREENFN', 'Green', log)
+        if direct:
+            return direct
+    if 'REDFN' in hdr:
+        direct = get_kpf_compdir(hdr, 'REDFN', 'Red', log)
+        if direct:
+            return direct
+    if 'CA_HKFN' in hdr:
+        direct = get_kpf_compdir(hdr, 'CA_HKFN', 'CaHK', log)
+        if direct:
+            return direct
+    if 'EXPMETERFN' in hdr:
+        direct = get_kpf_compdir(hdr, 'EXPMETERFN', 'ExpMeter', log)
+        if direct:
+            return direct
+
+    return None
+
+
+def get_kpf_compdir(hdr, hdr_key, comp_name, log):
+    log.info(f"{comp_name} filename: {hdr[hdr_key]}")
+    filename = hdr[hdr_key]
+    try:
+        direct = filename.split(comp_name)[0]
+        log.info(f"{comp_name} file directory: {direct}")
+        return direct
+    except IndexError:
+        log.error(f"could not determine directory: {comp_name}, filename: {filename}")
+
+    return None

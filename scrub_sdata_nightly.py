@@ -6,12 +6,16 @@ import json
 import subprocess
 import scrubber_utils as utils
 
+from datetime import datetime, timedelta
+from glob import glob
+
 APP_PATH = os.path.abspath(os.path.dirname(__file__))
 CONFIG_FILE = f'{APP_PATH}/scrub_sdata_config.live.ini'
 
 
 class ToDelete:
     def __init__(self, inst):
+        self.inst = inst
         self.utd = args.utd
         self.utd2 = args.utd2
         self.log = logging.getLogger(log_name)
@@ -19,6 +23,7 @@ class ToDelete:
         self.sdata_move = sdata_move
         self.dirs_made = []
         self.lev1_moved = []
+        self.paths2cln = set()
         self.metrics = {'staged': [0, 0], 'sdata': [0, 0], 'koaid': [0, 0],
                         'inst': [0, 0], 'nresults': self.db_obj.get_nresults(),
                         'warnings': self.db_obj.get_warnings()}
@@ -40,6 +45,9 @@ class ToDelete:
             # rsync will return 1 per file,  when it succeeds
             n_files_touched += self.rm_sdata_func(result)
 
+        if self.inst == 'KPF':
+            self.clean_up_kpf()
+
         return [len(sdata_files), n_files_touched]
 
     def rm_sdata_func(self, result):
@@ -58,10 +66,10 @@ class ToDelete:
             return 0
 
         # strip the leading /s for /s/sdata...
-        mv_path_local = ofname
+        local_path = ofname
         mv_path_remote = f"{ofname[2:]}"
 
-        moved = self._rm_files(mv_path_local, mv_path_remote)
+        moved = self._rm_files(local_path, mv_path_remote)
 
         if moved:
             self.mark_deleted(result['koaid'])
@@ -102,19 +110,23 @@ class ToDelete:
 
         return True
 
-    def _rm_files(self, mv_path_local, mv_path_remote, directory=False, recurse=False):
+    def _rm_files(self, local_path, remove_path, directory=False,
+                  only_dir=False, recursive=True):
         """
         remove sdata files
 
-        :param mv_path_local: <str> the /s/sdata... fullpath including filename
-        :param mv_path_remote: <str> the remote /sdata... fullpath including filename
+        removes remove_path - which is original same as local_path without /s
+        The remote disks use same location,  but are not mounted with /s
+
+        :param local_path: <str> the /s/sdata... fullpath including filename
+        :param remove_path: <str> the remote /sdata... fullpath including filename
         :param log_only:
         """
 
         # check for executedMasks directory
-        if not directory and 'mosfire' in mv_path_local:
-            exc_path_remote = mv_path_remote.rsplit('/', 1)[0]
-            exc_path_local = mv_path_local.rsplit('/', 1)[0]
+        if not directory and 'mosfire' in local_path:
+            exc_path_remote = remove_path.rsplit('/', 1)[0]
+            exc_path_local = local_path.rsplit('/', 1)[0]
             if not exc_path_remote or not exc_path_local:
                 return 0
 
@@ -124,25 +136,25 @@ class ToDelete:
             self._rm_files(exc_path_local, exc_path_remote, directory=True)
 
         # check that the file exists
-        if not utils.chk_file_exists(mv_path_local):
-            log_str = f'skipping {mv_path_local} -- moved or does not exist.'
+        if not utils.chk_file_exists(local_path):
+            log_str = f'skipping {local_path} -- moved or does not exist.'
             log.info(log_str)
             return 0
 
         inst_name = args.inst.upper()
         inst = utils.get_config_param(config, 'accounts', inst_name).lower()
         account = None
-        for direct in mv_path_remote.split('/'):
+        for direct in remove_path.split('/'):
             if inst in direct and 'fits' not in direct:
                 account = direct
 
         if not account:
-            for direct in mv_path_remote.split('/'):
+            for direct in remove_path.split('/'):
                 if 'eng' in direct and 'fits' not in direct:
                     account = direct
 
         if not account:
-            log.error(f'could not determine the account from: {mv_path_remote}')
+            log.error(f'could not determine the account from: {remove_path}')
             return 0
 
         acnt_numb = account.strip(inst).zfill(2)
@@ -155,7 +167,7 @@ class ToDelete:
             elif 'eng' in account:
                 pw = eng_pw
             else:
-                log.warning(f'could not determine the password from path: {mv_path_remote}')
+                log.warning(f'could not determine the password from path: {remove_path}')
                 return 0
 
         if not pw:
@@ -165,32 +177,21 @@ class ToDelete:
             pw = eng_pw
 
         # temporary for KPF
-        if inst_name == 'KPF' and not recurse:
-            files_to_remove = utils.kpf_component_files(mv_path_local,
-                                                        mv_path_remote, log)
-            if files_to_remove:
-                for mv_path in files_to_remove:
-                    storage_root = '/s/sdata1701'
-                    storage_dir = mv_path.replace(storage_root, '/instr1/KPF')
+        if inst_name == 'KPF' and recursive:
+            if not self.kpf_components(local_path, remove_path):
+                return False
 
-                    log.info(f'component files: {mv_path} storage: {storage_dir}')
-                    if not utils.exists_remote(f'{user}@{store_server}', storage_dir):
-                        log.error(f'data not on storage: {storage_dir} data: {mv_path}')
-                        return False
-
-                    mv_path_remote_new = '/' + mv_path.split('/s/')[-1]
-                    self._rm_files(mv_path, mv_path_remote_new, recurse=True)
-
-
-        if directory:
-            cmd = f'/bin/rm -r {mv_path_remote}'
+        if only_dir:
+            cmd = f'/bin/rmdir {remove_path}'
+        elif directory:
+            cmd = f'/bin/rm -r {remove_path}'
         else:
-            cmd = f'/bin/rm {mv_path_remote}'
+            cmd = f'/bin/rm {remove_path}'
 
         # TODO for testing
-        # cmd = f'/bin/ls {mv_path_remote}'
+        # cmd = f'/bin/ls {remove_path}'
 
-        log.info(f'remote command: {server} {cmd} {account} {pw} {mv_path_remote}')
+        log.info(f'remote command: {server} {cmd} {account} {pw} {remove_path}')
 
         # TODO this was diabled for testing
         try:
@@ -200,12 +201,82 @@ class ToDelete:
             self.log.warning(f'error with command: {server} {cmd} {account} {pw}')
 
         # check that it was removed locally (with /s)
-        if utils.chk_file_exists(mv_path_local):
-            self.log.error(f"File not removed,  check path: {mv_path_remote}")
+        if utils.chk_file_exists(local_path):
+            self.log.error(f"File not removed,  check path: {remove_path}")
             return 0
 
-        self.log.info(f"File removed from: {mv_path_remote}")
+        self.log.info(f"File removed from: {remove_path}")
         return 1
+
+    def kpf_components(self, local_path, remove_path):
+        files_to_remove = utils.kpf_component_files(local_path, remove_path, log)
+        if files_to_remove:
+            for mv_path in files_to_remove:
+                storage_root = '/s/sdata1701'
+                storage_dir = mv_path.replace(storage_root, '/instr1/KPF')
+
+                log.info(f'component files: {mv_path} storage: {storage_dir}')
+                if not utils.exists_remote(f'{user}@{store_server}', storage_dir):
+                    log.error(f'data not on storage: {storage_dir} data: {mv_path}')
+                    return False
+
+                remove_path_new = '/' + mv_path.split('/s/')[-1]
+                self._rm_files(mv_path, remove_path_new, recursive=False)
+
+                try:
+                    # remove filename and component
+                    component_path = mv_path.rsplit('/', 2)[0]
+                    remote_comp_path = remove_path_new.rsplit('/', 2)[0]
+                    storage_dir_path = storage_dir.rsplit('/', 2)[0]
+
+                    self.paths2cln.add((component_path, remote_comp_path, storage_dir_path))
+                except:
+                    pass
+
+        return True
+
+    def clean_up_kpf(self):
+
+        all_dirs = ['CaHK', 'CRED2', 'ExpMeter', 'FVC1', 'FVC2', 'FVC3',
+                    'Green', 'L0', 'Red', 'script_logs']
+
+        # clean up remaining files
+        for pth in self.paths2cln:
+            for cdir in all_dirs:
+                local = f'{pth[0]}/{cdir}/'
+                store = f'{pth[2]}/{cdir}'
+
+                # local = /s/sdata1701/kpfeng/2023feb02/script_logs/
+                # pth[1] = /sdata1701/kpfeng/2023feb02
+                # store = /instr1/KPF/kpfeng/2023feb02/script_logs
+                self.log.info(f'clean up paths: {local}, {pth[1]}, {store}')
+                file_list = glob(f'{local}/*', recursive=False)
+                for file in file_list:
+                    self.log.info(f'clean up files: {file}')
+                    try:
+                        filename = file.rsplit('/', 1)[1]
+                    except:
+                        pass
+                    self.log.info(f'clean up filename: {filename}')
+
+                    # chk exists on storageserver
+                    if utils.exists_remote(f'{user}@{store_server}',
+                                           f'{store}/{filename}'):
+                        self.log.info(f'clean up removing: {file},  stored: {store}')
+                        self._rm_files(f'{local}{filename}', file, recursive=False)
+
+                    else:
+                        self.log.info(f'file not on storage: {user}@'
+                                      f'{store_server}:{store}/{filename}*')
+
+                # remove component directory
+                self.log.info(f'clean up component directories: {local}')
+
+                self._rm_files(local, local, only_dir=True, recursive=False)
+
+            # remove date directory
+            self.log.info(f'clean up date directories: {pth[1]}')
+            self._rm_files(pth[1], pth[1], only_dir=True, recursive=False)
 
 
 class ChkArchive:
@@ -254,6 +325,28 @@ class ChkArchive:
             return len(archived_results['data'])
         except:
             return 0
+
+    def kpf_move_data(self, utd, utd2):
+        def daterange(start_date, end_date):
+            for n in range(int((end_date - start_date).days)):
+                yield start_date + timedelta(n)
+
+        kpf_root = '/s/sdata1701'
+
+        utd_dt = datetime.strptime(utd, '%Y-%m-%d')
+        utd_dt2 = datetime.strptime(utd2, '%Y-%m-%d')
+        file_paths = []
+        for utd_str in daterange(utd_dt, utd_dt2):
+            mon_dir = utd_str.strftime("%Y%b%d").lower()
+            file_path = f'{kpf_root}/*/{mon_dir}/*/*fits'
+            try:
+                files = glob(file_path, recursive=False)
+                file_paths += files
+            except FileNotFoundError:
+                pass
+
+        return file_paths
+
 
     def get_file_list(self, utd, utd2, inst, add):
         """
@@ -474,16 +567,6 @@ if __name__ == '__main__':
 
     if not sdata_files:
         exit("No files found to remove.")
-
-    #TODO remove if not needed.
-    # if inst_comp:
-    #     try:
-    #         ofname = sdata_files[0]['ofname']
-    #         mv_path = f"{inst_root}{inst_comp}/{ofname[2:]}"
-    #     except (TypeError, KeyError, IndexError):
-    #         mv_path = None
-    # else:
-    #     mv_path = sdata_files[0]['ofname']
 
     try:
         mv_path = sdata_files[0]['ofname']

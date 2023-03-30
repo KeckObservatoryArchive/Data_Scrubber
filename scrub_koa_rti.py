@@ -15,6 +15,7 @@ CONFIG_FILE = f'{APP_PATH}/scrubber_config.live.ini'
 
 class ToDelete:
     def __init__(self, inst):
+        self.inst = inst
         self.utd = args.utd
         self.utd2 = args.utd2
         self.log = logging.getLogger(log_name)
@@ -23,6 +24,7 @@ class ToDelete:
         self.dirs_made = []
         self.lev1_moved = []
         self.lev2_moved = []
+        self.dir2store = set()
         self.metrics = {'staged': [0, 0], 'koaid': [0, 0],
                         'inst': [0, 0], 'nresults': self.db_obj.get_nresults(),
                         'warnings': self.db_obj.get_warnings()}
@@ -42,6 +44,8 @@ class ToDelete:
         :return: <list<int>,<int>> number moved/deleted, number in list.
         """
         file_list = self.db_obj.get_files_to_move(file_type=file_type)
+        # if self.inst == 'KPF':
+        #     self.store_kpf_components()
         if not file_list:
             return [0, 0]
 
@@ -84,36 +88,45 @@ class ToDelete:
 
         # TODO temporarily store component files for KPF
         ofname = result['ofname']
+        log.info(f'store components if inst: {args.inst}, {ofname}')
         if args.inst == 'KPF' and 'L0' in ofname:
-            storage_root = '/s/sdata1701'
-            storage_dir = ofname.replace(storage_root, '/instr1/KPF')
+            # /koastorage05/KPF//koadata1701/20230317/lev0/
+            storage_dir = ofname.replace('/s/sdata1701', '/instr1/KPF')
             storage_dir = storage_dir.split('L0')[0]
+
+            kpf_comp_root = utils.kpf_component_dirs(ofname, storage_dir, log)
+            log.info(f'comp root {kpf_comp_root} {storage_dir}')
+            self.dir2store.add((kpf_comp_root, storage_dir))
+
+        return return_val
+
+    def store_kpf_components(self):
+        # copy all Files,  in case some are not in the headers
+        all_dirs = ['CaHK', 'CRED2', 'ExpMeter', 'FVC1', 'FVC2', 'FVC3',
+                    'Green', 'L0', 'Red', 'script_logs']
+        log.info(f'dir2store {self.dir2store}')
+        for dir_set in self.dir2store:
+            kpf_comp_root = dir_set[0]
+            storage_dir = dir_set[1]
 
             # make directory if it doesn't exist
             utils.make_remote_dir('koaadmin@storageserver', storage_dir, log)
 
-            kpf_components = utils.kpf_component_files(ofname, storage_dir, log)
-            if kpf_components:
-                # copy, don't remove the files
-                orig_rm = self.rm
-                self.rm = ''
-                for mv_path in kpf_components:
-                    component_name = mv_path.split('/')[-2]
-                    storage_now = f'{storage_dir}/{component_name}/'
-                    if not utils.exists_remote('koaadmin@storageserver', storage_now):
-                        utils.make_remote_dir('koaadmin@storageserver', storage_now, log)
-                    log.info(f'component directories {mv_path} {storage_now}')
-                    self._rsync_files(mv_path, storage_now)
-
-                # copy the L0 file as well
-                storage_now = f'{storage_dir}/L0/'
+            # copy, don't remove the files
+            orig_rm = self.rm
+            self.rm = ''
+            for comp_dir in all_dirs:
+                storage_now = f'{storage_dir}/{comp_dir}/'
+                mv_path = f'{kpf_comp_root}{comp_dir}'
+                log.info(f'component directory: {comp_dir}, {mv_path}, {storage_now}')
                 if not utils.exists_remote('koaadmin@storageserver', storage_now):
                     utils.make_remote_dir('koaadmin@storageserver', storage_now, log)
-                self._rsync_files(ofname, storage_now)
+                log.info(f'component directories, from: {mv_path} to: {storage_now}')
+                self._rsync_files(mv_path, storage_now, sync_all=True)
 
-                self.rm = orig_rm
+            self.rm = orig_rm
 
-        return return_val
+        return
 
 
     def store_lev1_func(self, result):
@@ -266,7 +279,7 @@ class ToDelete:
 
         return True
 
-    def _rsync_files(self, mv_path, storage_dir, koaid=None):
+    def _rsync_files(self, mv_path, storage_dir, koaid=None, sync_all=False):
         """
         rsync all the DEP files to bring them to storage.
 
@@ -294,6 +307,10 @@ class ToDelete:
             rsync_cmd = ["rsync", self.rm, "-avz", "-e", "ssh",
                          "--include", f"{koaid}*",
                          "--exclude", "*", f"{server_str}/", store_loc]
+        elif sync_all:
+            rsync_cmd = ["/usr/bin/rsync", self.rm, "-avz", "ssh",
+                         "--include", f"*fits*", "--exclude", "*",
+                         f"{server_str}/", store_loc]
         elif '.fits' in server_str:
             rsync_cmd = ["rsync", self.rm, "-vz", server_str, store_loc]
         else:
@@ -541,6 +558,8 @@ if __name__ == '__main__':
     metrics = delete_obj.get_metrics()
     if move:
         metrics['koaid'] = delete_obj.del_mv(None, delete_obj.store_lev0_func)
+        if args.inst == 'KPF':
+            delete_obj.store_kpf_components()
         metrics['staged'] = delete_obj.del_mv(None, delete_obj.store_stage_func)
 
     if lev1:
