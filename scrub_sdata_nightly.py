@@ -271,12 +271,11 @@ class ToDelete:
 
                 # remove component directory
                 self.log.info(f'clean up component directories: {local}')
-
                 self._rm_files(local, local, only_dir=True, recursive=False)
 
             # remove date directory
-            self.log.info(f'clean up date directories: {pth[1]}')
-            self._rm_files(pth[1], pth[1], only_dir=True, recursive=False)
+            self.log.info(f'clean up date directories: /s{pth[1]}')
+            self._rm_files(f'/s{pth[1]}', pth[1], only_dir=True, recursive=False)
 
 
 class ChkArchive:
