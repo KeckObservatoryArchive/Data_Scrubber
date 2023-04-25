@@ -44,8 +44,7 @@ class ToDelete:
         :return: <list<int>,<int>> number moved/deleted, number in list.
         """
         file_list = self.db_obj.get_files_to_move(file_type=file_type)
-        # if self.inst == 'KPF':
-        #     self.store_kpf_components()
+
         if not file_list:
             return [0, 0]
 
@@ -83,20 +82,6 @@ class ToDelete:
 
         if not self.add_archived_dir(koaid, storage_dir, level=0):
             self.log.warning(f"archive_dir not set for {koaid}")
-
-        log.info('running store stage')
-
-        # TODO temporarily store component files for KPF
-        ofname = result['ofname']
-        log.info(f'store components if inst: {args.inst}, {ofname}')
-        if args.inst == 'KPF' and 'L0' in ofname:
-            # /koastorage05/KPF//koadata1701/20230317/lev0/
-            storage_dir = ofname.replace('/s/sdata1701', '/instr1/KPF')
-            storage_dir = storage_dir.split('L0')[0]
-
-            kpf_comp_root = utils.kpf_component_dirs(ofname, storage_dir, log)
-            log.info(f'comp root {kpf_comp_root} {storage_dir}')
-            self.dir2store.add((kpf_comp_root, storage_dir))
 
         return return_val
 
@@ -304,17 +289,19 @@ class ToDelete:
         log.info(f'koaid: {koaid}')
 
         if koaid:
-            rsync_cmd = ["rsync", self.rm, "-avz", "-e", "ssh",
-                         "--include", f"{koaid}*",
+            rsync_cmd = ["rsync", '--rsync-path="nice rsync"', self.rm,
+                         "-avz", "-e", "ssh", "--include", f"{koaid}*",
                          "--exclude", "*", f"{server_str}/", store_loc]
         elif sync_all:
-            rsync_cmd = ["/usr/bin/rsync", self.rm, "-avz", "ssh",
-                         "--include", f"*fits*", "--exclude", "*",
-                         f"{server_str}/", store_loc]
+            rsync_cmd = ["/usr/bin/rsync", '--rsync-path="nice rsync"',
+                         self.rm, "-avz", "ssh", "--include", f"*fits*",
+                         "--exclude", "*", f"{server_str}/", store_loc]
         elif '.fits' in server_str:
-            rsync_cmd = ["rsync", self.rm, "-vz", server_str, store_loc]
+            rsync_cmd = ["rsync", '--rsync-path="nice rsync"',
+                        self.rm, "-vz", server_str, store_loc]
         else:
-            rsync_cmd = ["rsync", self.rm, "-avz", server_str, store_loc]
+            rsync_cmd = ["rsync", '--rsync-path="nice rsync"', self.rm,
+                         "-avz", server_str, store_loc]
 
         log.info(f'rsync cmd: {rsync_cmd}')
 

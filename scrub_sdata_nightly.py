@@ -257,17 +257,11 @@ class ToDelete:
                         filename = file.rsplit('/', 1)[1]
                     except:
                         pass
-                    self.log.info(f'clean up filename: {filename}')
 
-                    # chk exists on storageserver
-                    if utils.exists_remote(f'{user}@{store_server}',
-                                           f'{store}/{filename}'):
-                        self.log.info(f'clean up removing: {file},  stored: {store}')
-                        self._rm_files(f'{local}{filename}', file, recursive=False)
+                    self.log.info(f'clean up removing filename: {filename}')
 
-                    else:
-                        self.log.info(f'file not on storage: {user}@'
-                                      f'{store_server}:{store}/{filename}*')
+                    # KPF component files no longer stored,  just removed
+                    self._rm_files(f'{local}{filename}', file, recursive=False)
 
                 # remove component directory
                 self.log.info(f'clean up component directories: {local}')
