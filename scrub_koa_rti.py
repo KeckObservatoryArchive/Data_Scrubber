@@ -289,16 +289,15 @@ class ToDelete:
         log.info(f'koaid: {koaid}')
 
         if koaid:
-            rsync_cmd = ["rsync", '--rsync-path="nice rsync"', self.rm,
-                         "-avz", "-e", "ssh", "--include", f"{koaid}*",
+            rsync_cmd = ["rsync", self.rm, "-avz", "-e", "ssh",
+                         "--include", f"{koaid}*",
                          "--exclude", "*", f"{server_str}/", store_loc]
         elif sync_all:
-            rsync_cmd = ["/usr/bin/rsync", '--rsync-path="nice rsync"',
-                         self.rm, "-avz", "ssh", "--include", f"*fits*",
+            rsync_cmd = ["/usr/bin/rsync", self.rm, "-avz", "ssh",
+                         "--include", f"*fits*",
                          "--exclude", "*", f"{server_str}/", store_loc]
         elif '.fits' in server_str:
-            rsync_cmd = ["rsync", '--rsync-path="nice rsync"',
-                        self.rm, "-vz", server_str, store_loc]
+            rsync_cmd = ["rsync", self.rm, "-vz", server_str, store_loc]
         else:
             rsync_cmd = ["rsync", '--rsync-path="nice rsync"', self.rm,
                          "-avz", server_str, store_loc]
