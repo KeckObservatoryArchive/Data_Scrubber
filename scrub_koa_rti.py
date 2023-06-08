@@ -80,6 +80,10 @@ class ToDelete:
 
         return_val = self._rsync_files(mv_path, storage_dir, koaid)
 
+        if return_val != 1:
+            return return_val
+
+        # if successfully moved,  add archive dir to DB entry
         if not self.add_archived_dir(koaid, storage_dir, level=0):
             self.log.warning(f"archive_dir not set for {koaid}")
 
@@ -139,6 +143,10 @@ class ToDelete:
             return_val = self._rsync_files(mv_path, storage_dir)
             self.lev1_moved.append(mv_path)
 
+        if return_val != 1:
+            return return_val
+
+        # if successfully moved,  add archive dir to DB entry
         if not self.add_archived_dir(koaid, storage_dir, level=1):
             self.log.warning(f"archive_dir not set for {koaid}")
 
@@ -169,6 +177,10 @@ class ToDelete:
             return_val = self._rsync_files(mv_path, storage_dir)
             self.lev2_moved.append(mv_path)
 
+        if return_val != 1:
+            return return_val
+
+        # if successfully moved,  add archive dir to DB entry
         if not self.add_archived_dir(koaid, storage_dir, level=2):
             self.log.warning(f"archive_dir not set for {koaid}")
 

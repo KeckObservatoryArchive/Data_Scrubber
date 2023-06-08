@@ -401,7 +401,10 @@ def parse_args(config):
                         help="Name of instrument to run the scrubber for.")
 
     # add inst specific start/end ndays from the config if exist
-    args = parser.parse_args()
+    # args = parser.parse_args()
+    args, unknown_args = parser.parse_known_args()
+    print(args)
+    print(args.inst.lower())
 
     try:
         start = int(get_config_param(config, 'TIMEFRAME', f'{args.inst.lower()}_start'))
@@ -410,6 +413,7 @@ def parse_args(config):
         start = int(get_config_param(config, 'TIMEFRAME', 'start'))
         end = int(get_config_param(config, 'TIMEFRAME', 'end'))
 
+    print(start, end)
     parser.add_argument("--utd", type=str,
                         default=(now - timedelta(days=start)).strftime('%Y-%m-%d'),
                         help="Start date to process YYYY-MM-DD.")

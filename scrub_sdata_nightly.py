@@ -122,7 +122,6 @@ class ToDelete:
         :param remove_path: <str> the remote /sdata... fullpath including filename
         :param log_only:
         """
-
         # check for executedMasks directory
         if not directory and 'mosfire' in local_path:
             exc_path_remote = remove_path.rsplit('/', 1)[0]
@@ -166,6 +165,8 @@ class ToDelete:
                 pw = eng_pw
             elif 'eng' in account:
                 pw = eng_pw
+            elif inst_name == 'KPF':
+                pw = eng_pw
             else:
                 log.warning(f'could not determine the password from path: {remove_path}')
                 return 0
@@ -199,6 +200,7 @@ class ToDelete:
         except Exception as err:
             self.log.warning(f'exception in executing remote command: {err}')
             self.log.warning(f'error with command: {server} {cmd} {account} {pw}')
+            return 0
 
         # check that it was removed locally (with /s)
         if utils.chk_file_exists(local_path):
@@ -206,6 +208,7 @@ class ToDelete:
             return 0
 
         self.log.info(f"File removed from: {remove_path}")
+
         return 1
 
     def kpf_components(self, local_path, remove_path):
@@ -216,9 +219,6 @@ class ToDelete:
                 storage_dir = mv_path.replace(storage_root, '/instr1/KPF')
 
                 log.info(f'component files: {mv_path} storage: {storage_dir}')
-                if not utils.exists_remote(f'{user}@{store_server}', storage_dir):
-                    log.error(f'data not on storage: {storage_dir} data: {mv_path}')
-                    return False
 
                 remove_path_new = '/' + mv_path.split('/s/')[-1]
                 self._rm_files(mv_path, remove_path_new, recursive=False)
@@ -551,6 +551,7 @@ if __name__ == '__main__':
     log = logging.getLogger(log_name)
     print(f'writing log to: {log_dir}/{log_name}')
 
+    print(f"Scrubbing sdata in UT range: {args.utd} to {args.utd2}\n")
     log.info(f"Scrubbing sdata in UT range: {args.utd} to {args.utd2}\n")
     log.info(f"Avoiding paths with: {path_exclude}")
 
