@@ -237,7 +237,7 @@ class ToDelete:
 
     def clean_up_kpf(self):
 
-        all_dirs = ['CaHK', 'CRED2', 'ExpMeter', 'FVC1', 'FVC2', 'FVC3',
+        all_dirs = ['CaHK', 'ExpMeter', 'FVC1', 'FVC2', 'FVC3',
                     'Green', 'L0', 'Red', 'script_logs']
 
         # clean up remaining files
