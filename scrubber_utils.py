@@ -399,6 +399,8 @@ def parse_args(config):
                         help="Define the directory for the log.")
     parser.add_argument("--inst", type=str, choices=inst_set, required=True,
                         help="Name of instrument to run the scrubber for.")
+    parser.add_argument("--force", type=int, default=0,
+                        help="Don't exclude files with archive_dir set.")
 
     # add inst specific start/end ndays from the config if exist
     # args = parser.parse_args()
@@ -413,7 +415,7 @@ def parse_args(config):
         start = int(get_config_param(config, 'TIMEFRAME', 'start'))
         end = int(get_config_param(config, 'TIMEFRAME', 'end'))
 
-    print(start, end)
+    print(f"default timeframe: -{start} to -{end}")
     parser.add_argument("--utd", type=str,
                         default=(now - timedelta(days=start)).strftime('%Y-%m-%d'),
                         help="Start date to process YYYY-MM-DD.")

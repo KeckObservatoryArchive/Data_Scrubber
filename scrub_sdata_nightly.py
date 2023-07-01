@@ -152,6 +152,10 @@ class ToDelete:
                 if 'eng' in direct and 'fits' not in direct:
                     account = direct
 
+        if inst_name == 'KPF':
+            account = 'kpfeng'
+
+
         if not account:
             log.error(f'could not determine the account from: {remove_path}')
             return 0
@@ -237,8 +241,9 @@ class ToDelete:
 
     def clean_up_kpf(self):
 
-        all_dirs = ['CaHK', 'ExpMeter', 'FVC1', 'FVC2', 'FVC3',
-                    'Green', 'L0', 'Red', 'script_logs']
+        # all_dirs = ['CaHK', 'ExpMeter', 'FVC1', 'FVC2', 'FVC3',
+        #             'Green', 'L0', 'Red', 'script_logs']
+        all_dirs = ['CaHK', 'ExpMeter', 'Green', 'L0', 'Red']
 
         # clean up remaining files
         for pth in self.paths2cln:
@@ -340,7 +345,6 @@ class ChkArchive:
 
         return file_paths
 
-
     def get_file_list(self, utd, utd2, inst, add):
         """
         Query the database for the files to delete or move.  Verify
@@ -403,7 +407,6 @@ class ChkArchive:
                       f"{utils.diff_list(d_before, d_after)}")
 
         return archived_data
-
 
     @staticmethod
     def check_file_stored(dat):

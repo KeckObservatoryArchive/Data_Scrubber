@@ -311,8 +311,7 @@ class ToDelete:
         elif '.fits' in server_str:
             rsync_cmd = ["rsync", self.rm, "-vz", server_str, store_loc]
         else:
-            rsync_cmd = ["rsync", '--rsync-path="nice rsync"', self.rm,
-                         "-avz", server_str, store_loc]
+            rsync_cmd = ["rsync", self.rm, "-avz", server_str, store_loc]
 
         log.info(f'rsync cmd: {rsync_cmd}')
 
@@ -339,17 +338,21 @@ class ChkArchive:
         self.move_lev1 = []
         self.move_lev2 = []
 
+        if not args.force:
+            add_str = "ARCHIVE_DIR IS NULL"
+        else:
+            add_str = None
+
         if move:
             self.to_move = self.file_list(args.utd, args.utd2, inst,
-                                          "ARCHIVE_DIR IS NULL", 'mv')
-                                          # "ARCHIVE_DIR IS NULL", 'mv')
+                                          add_str, 'mv')
         if lev1:
             self.move_lev1 = self.file_list(
-                args.utd, args.utd2, inst, "ARCHIVE_DIR IS NULL", 'mv', level=1)
+                args.utd, args.utd2, inst, add_str, 'mv', level=1)
 
         if lev2:
             self.move_lev2 = self.file_list(
-                args.utd, args.utd2, inst, "ARCHIVE_DIR IS NULL", 'mv', level=2)
+                args.utd, args.utd2, inst, add_str, 'mv', level=2)
 
     def get_errors(self):
         return self.errors_dict
@@ -517,7 +520,7 @@ if __name__ == '__main__':
     config.read(CONFIG_FILE)
 
     args = utils.parse_args(config)
-
+    print(f"UT Dates: {args.utd} to {args.utd2}")
     if args.dev:
         config_type = 'DEV'
     else:
