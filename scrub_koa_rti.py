@@ -83,9 +83,9 @@ class ToDelete:
         if return_val != 1:
             return return_val
 
-        # if successfully moved,  add archive dir to DB entry
-        if not self.add_archived_dir(koaid, storage_dir, level=0):
-            self.log.warning(f"archive_dir not set for {koaid}")
+        # # if successfully moved,  add archive dir to DB entry
+        # if not self.add_archived_dir(koaid, storage_dir, level=0):
+        #     self.log.warning(f"archive_dir not set for {koaid}")
 
         return return_val
 
@@ -198,11 +198,22 @@ class ToDelete:
         mv_path = result['stage_file']
         ofname = result['ofname']
 
+        log.info(f'Storing Stage for: {koaid}')
+
         storage_dir = self.get_storage_dir(koaid, mv_path, ofname=ofname)
         if not storage_dir:
+            log.error(f'Could not get storage dir for: {koaid}')
             return 0
 
-        return self._rsync_files(mv_path, storage_dir)
+        return_val = self._rsync_files(mv_path, storage_dir)
+        if return_val != 1:
+            return return_val
+
+        # if successfully moved,  add archive dir to DB entry
+        if not self.add_archived_dir(koaid, storage_dir, level=0):
+            self.log.warning(f"archive_dir not set for {koaid}")
+
+        return return_val
 
     def get_storage_dir(self, koaid, mv_path, ofname=None, level=0):
         """
@@ -559,8 +570,8 @@ if __name__ == '__main__':
     metrics = delete_obj.get_metrics()
     if move:
         metrics['koaid'] = delete_obj.del_mv(None, delete_obj.store_lev0_func)
-        if args.inst == 'KPF':
-            delete_obj.store_kpf_components()
+        # if args.inst == 'KPF':
+        #     delete_obj.store_kpf_components()
         metrics['staged'] = delete_obj.del_mv(None, delete_obj.store_stage_func)
 
     if lev1:

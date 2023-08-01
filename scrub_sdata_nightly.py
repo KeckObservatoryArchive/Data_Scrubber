@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import configparser
 import logging
@@ -71,6 +72,8 @@ class ToDelete:
 
         moved = self._rm_files(local_path, mv_path_remote)
 
+        self.log.info(f"rm_sdata_func -- file moved: {moved}")
+
         if moved:
             self.mark_deleted(result['koaid'])
 
@@ -138,6 +141,8 @@ class ToDelete:
         if not utils.chk_file_exists(local_path):
             log_str = f'skipping {local_path} -- moved or does not exist.'
             log.info(log_str)
+            # if moved:
+            #     self.mark_deleted(result['koaid'])
             return 0
 
         inst_name = args.inst.upper()
@@ -154,7 +159,6 @@ class ToDelete:
 
         if inst_name == 'KPF':
             account = 'kpfeng'
-
 
         if not account:
             log.error(f'could not determine the account from: {remove_path}')
@@ -219,9 +223,8 @@ class ToDelete:
         files_to_remove = utils.kpf_component_files(local_path, remove_path, log)
         if files_to_remove:
             for mv_path in files_to_remove:
-                storage_root = '/s/sdata1701'
-                storage_dir = mv_path.replace(storage_root, '/instr1/KPF')
 
+                storage_dir = re.sub(rf'{koa_disk_num[-1]}.', '/instr1/KPF', mv_path)
                 log.info(f'component files: {mv_path} storage: {storage_dir}')
 
                 remove_path_new = '/' + mv_path.split('/s/')[-1]
@@ -243,7 +246,7 @@ class ToDelete:
 
         # all_dirs = ['CaHK', 'ExpMeter', 'FVC1', 'FVC2', 'FVC3',
         #             'Green', 'L0', 'Red', 'script_logs']
-        all_dirs = ['CaHK', 'ExpMeter', 'Green', 'L0', 'Red']
+        all_dirs = ['CaHK', 'Green', 'L0', 'Red']
 
         # clean up remaining files
         for pth in self.paths2cln:
@@ -251,9 +254,9 @@ class ToDelete:
                 local = f'{pth[0]}/{cdir}/'
                 store = f'{pth[2]}/{cdir}'
 
-                # local = /s/sdata1701/kpfeng/2023feb02/script_logs/
+                # local = /s/sdata1701/kpfeng/2023feb02/Red/
                 # pth[1] = /sdata1701/kpfeng/2023feb02
-                # store = /instr1/KPF/kpfeng/2023feb02/script_logs
+                # store = /instr1/KPF/kpfeng/2023feb02/Red
                 self.log.info(f'clean up paths: {local}, {pth[1]}, {store}')
                 file_list = glob(f'{local}/*', recursive=False)
                 for file in file_list:
@@ -266,7 +269,22 @@ class ToDelete:
                     self.log.info(f'clean up removing filename: {filename}')
 
                     # KPF component files no longer stored,  just removed
-                    self._rm_files(f'{local}{filename}', file, recursive=False)
+                    if cdir == 'L0':
+                        # storage_dir = utils.determine_storage(
+                        #     koaid, config, config_type, ofname=ofname)
+                        storage_dir = re.sub(rf'{koa_disk_num[-1]}.', '/instr1/KPF', mv_path)
+                        if not utils.exists_remote(f'{user}@{store_server}', storage_dir):
+                            log.error(f'clean_up_kpf - data not on storage: {storage_dir} data: {mv_path}')
+                            continue
+
+                    moved = self._rm_files(f'{local}{filename}', file, recursive=False)
+                    if cdir == 'L0' and moved:
+                        try:
+                            koaid = filename.split('.fit')[0]
+                            self.mark_deleted(koaid)
+                        except IndexError:
+                            log.warning('clean_up_kpf: cannot determine KOAID')
+                            continue
 
                 # remove component directory
                 self.log.info(f'clean up component directories: {local}')
@@ -575,6 +593,7 @@ if __name__ == '__main__':
     else:
         nfiles_before = 0
 
+    koa_disk_num = utils.get_config_param(config, 'koa_disk', args.inst)
     if sdata_move:
         metrics['sdata'] = delete_obj.rm_sdata_files(sdata_files)
 
