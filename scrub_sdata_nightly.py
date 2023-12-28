@@ -246,7 +246,7 @@ class ToDelete:
 
         # all_dirs = ['CaHK', 'ExpMeter', 'FVC1', 'FVC2', 'FVC3',
         #             'Green', 'L0', 'Red', 'script_logs']
-        all_dirs = ['CaHK', 'Green', 'L0', 'Red']
+        all_dirs = ['CaHK', 'Green', 'Red']
 
         # clean up remaining files
         for pth in self.paths2cln:
@@ -267,15 +267,6 @@ class ToDelete:
                         pass
 
                     self.log.info(f'clean up removing filename: {filename}')
-
-                    # KPF component files no longer stored,  just removed
-                    if cdir == 'L0':
-                        # storage_dir = utils.determine_storage(
-                        #     koaid, config, config_type, ofname=ofname)
-                        storage_dir = re.sub(rf'{koa_disk_num[-1]}.', '/instr1/KPF', mv_path)
-                        if not utils.exists_remote(f'{user}@{store_server}', storage_dir):
-                            log.error(f'clean_up_kpf - data not on storage: {storage_dir} data: {mv_path}')
-                            continue
 
                     moved = self._rm_files(f'{local}{filename}', file, recursive=False)
                     if cdir == 'L0' and moved:
@@ -553,6 +544,12 @@ if __name__ == '__main__':
         path_exclude = None
 
     eng_pw = utils.get_config_param(config, 'passwords', 'eng_account')
+
+    # update the PW for new AD PW for NIRC2
+    if args.inst.lower() == 'nirc2':
+        pw_suffix = utils.get_config_param(config, 'passwords', f'{args.inst}_suffix')
+        eng_pw += pw_suffix
+        numbered_suffix += pw_suffix
 
     inst_root = utils.get_config_param(config, 'inst_disk', 'path_root')
     try:
