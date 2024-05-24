@@ -15,6 +15,7 @@ def remove_guider_imgs(direct, utd2):
 
     server = utils.get_config_param(config, 'servers', 'KPF')
     cnt = 0
+    expected = 0
 
     for root, dirs, files in os.walk(direct):
         for file in files:
@@ -28,18 +29,21 @@ def remove_guider_imgs(direct, utd2):
 
             # uncomment to see what it is doing
             if creation_date < utd_obj:
-                remove_path = '/' + file_path.lstrip('/').lstrip('s')
-                cmd = f'/bin/rm {remove_path}'
+                # remove_path = '/' + file_path.lstrip('/').lstrip('s')
+                # cmd = f'/bin/rm {remove_path}'
+                cmd = f'/bin/rm {file_path}'
                 if '.fits' not in cmd:
                     continue
 
                 cnt += remove_file(log, server, cmd, file_path)
+                expected += 1
 
+    return cnt, expected
 
 def remove_file(log, server, cmd, local_path):
-    remove_path = '/' + local_path.lstrip('/').lstrip('s')
+    # remove_path = '/' + local_path.lstrip('/').lstrip('s')
     try:
-        utils.execute_remote_cmd(server, cmd, account, pw)
+        std_out = utils.execute_remote_cmd(server, cmd, account, pw)
     except Exception as err:
         log.warning(f'exception in executing remote command: {err}')
         log.warning(f'error with command: {server} {cmd} {account} {pw}')
@@ -47,10 +51,13 @@ def remove_file(log, server, cmd, local_path):
 
     # check that it was removed locally (with /s)
     if utils.chk_file_exists(local_path):
-        log.error(f"File not removed,  check path: {remove_path}")
+        # log.error(f"File not removed,  check path: {remove_path}")
+        log.error(f"File not removed,  check path: {local_path}, "
+                  f"ssh/rm output: {std_out}")
         return 0
 
-    log.info(f"File removed from: {remove_path}")
+    # log.info(f"File removed from: {remove_path}")
+    log.info(f"File removed from: {local_path}")
 
     return 1
 
@@ -128,5 +135,10 @@ if __name__ == '__main__':
     log.info(f"Scrubbing kpfguider images created before: {args.utd2}\n")
     log.info(f"directory: {direct}.\n")
 
-    remove_guider_imgs(direct, args.utd2)
+    cnt, expected_cnt = remove_guider_imgs(direct, args.utd2)
 
+    if cnt != expected_cnt:
+        report = f"The count from the KPF Guide Scrubber does not match,  " \
+                 f"expected to be deleted: {expected_cnt},  actually " \
+                 f"deleted; {cnt}"
+        utils.write_emails(config, report, log, prefix=f'KPF GUIDE SDATA')

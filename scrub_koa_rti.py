@@ -70,7 +70,8 @@ class ToDelete:
         :return: <int> 1 if file removed successfully,  or 1
         """
         koaid = result['koaid']
-        mv_path = result['process_dir']
+        # mv_path = result['process_dir']
+        mv_path = f"/{args.tel}{result['process_dir'].strip('/')}"
 
         storage_dir = self.get_storage_dir(koaid, mv_path)
         if not storage_dir:
@@ -127,7 +128,7 @@ class ToDelete:
         """
         return_val = 0
         koaid = result['koaid']
-        mv_path = result['process_dir']
+        mv_path = f"/{args.tel}{result['process_dir'].strip('/')}"
 
         if 'lev1' not in mv_path:
             self.log.warning(f"lev1 path format is incorrect: {mv_path}")
@@ -161,7 +162,7 @@ class ToDelete:
         """
         return_val = 0
         koaid = result['koaid']
-        mv_path = result['process_dir']
+        mv_path = f"/{args.tel}{result['process_dir'].strip('/')}"
 
         if 'lev2' not in mv_path:
             self.log.warning(f"lev2 path format is incorrect: {mv_path}")
@@ -195,7 +196,7 @@ class ToDelete:
         :return: <int> 1 if file removed successfully,  or 1
         """
         koaid = result['koaid']
-        mv_path = result['stage_file']
+        mv_path = f"/{args.tel}{result['stage_file'].strip('/')}"
         ofname = result['ofname']
 
         log.info(f'Storing Stage for: {koaid}')
@@ -276,13 +277,12 @@ class ToDelete:
         try:
             results = json.loads(results)
         except Exception as err:
-            self.log.warning(f"Error: {err}, line: {sys.exc_info()[-1].tb_lineno}")
+            self.log.warning(f"Error: {err}")
 
         if results and type(results) == dict and results['success'] == 1:
             self.log.info(f"{column} set for koaid: {koaid}")
         else:
-            self.log.warning(f"{column} not set for: {koaid}, "
-                             f"line: {sys.exc_info()[-1].tb_lineno}")
+            self.log.warning(f"{column} not set for: {koaid}")
             return False
 
         return True
@@ -544,7 +544,7 @@ if __name__ == '__main__':
     lev1 = int(utils.get_config_param(config, 'MODE', 'lev1'))
     lev2 = int(utils.get_config_param(config, 'MODE', 'lev2'))
 
-    site = utils.get_config_param(config, config_type, 'site')
+    site = utils.get_config_param(config, config_type, f'site_{args.tel}')
     user = utils.get_config_param(config, config_type, 'user')
     store_server = utils.get_config_param(config, config_type, 'store_server')
     storage_root = utils.get_config_param(config, config_type, 'storage_root_rti')
@@ -558,9 +558,12 @@ if __name__ == '__main__':
 
     log_name, log_stream = utils.create_logger('rti_scrubber', log_dir)
     log = logging.getLogger(log_name)
-    files_root = utils.get_config_param(config, 'koa_disk', 'path_root')
 
-    nfiles_before = utils.count_koa_files(args)
+    # this should be /koadata,  files_root becomes /k1koadata
+    basic_root = utils.get_config_param(config, 'koa_disk', 'path_root')
+    files_root = f"/{args.tel}{basic_root.strip('/')}"
+
+    nfiles_before = utils.count_koa_files(args, files_root)
 
     storage_direct = storage_root + storage_num
     store_before = utils.count_store(user, store_server, f'{storage_direct}',
@@ -584,7 +587,7 @@ if __name__ == '__main__':
         metrics['lev2'] = delete_obj.del_mv('lev2', delete_obj.store_lev2_func)
 
     utils.clean_empty_dirs(files_root, log)
-    nfiles_after = utils.count_koa_files(args)
+    nfiles_after = utils.count_koa_files(args, files_root)
     store_after = utils.count_store(user, store_server, f'{storage_direct}',
                                     f'{args.inst}/*', log)
 

@@ -66,9 +66,10 @@ class ToDelete:
         if not ofname or len(ofname) < 2:
             return 0
 
-        # strip the leading /s for /s/sdata...
-        local_path = ofname
+        # strip the leading /s for /s/sdata...  add the /net/server (non-summit servers)
+        # local_path = ofname
         mv_path_remote = f"{ofname[2:]}"
+        local_path = f"{inst_comp}/{mv_path_remote}"
 
         moved = self._rm_files(local_path, mv_path_remote)
 
@@ -527,7 +528,8 @@ if __name__ == '__main__':
     except KeyError:
         sdata_move = 0
 
-    site = utils.get_config_param(config, config_type, 'site')
+    site = utils.get_config_param(config, config_type, f'site_{args.tel}')
+    print('site', site)
     user = utils.get_config_param(config, config_type, 'user')
     store_server = utils.get_config_param(config, config_type, 'store_server')
 
@@ -553,7 +555,7 @@ if __name__ == '__main__':
 
     inst_root = utils.get_config_param(config, 'inst_disk', 'path_root')
     try:
-        inst_comp = utils.get_config_param(config, 'inst_disk', args.inst)
+        inst_comp = f"{inst_root}/{utils.get_config_param(config, 'inst_disk', args.inst)}"
     except:
         inst_comp = None
 

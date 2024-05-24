@@ -390,6 +390,7 @@ def parse_args(config):
     insts = get_config_param(config, 'inst_list', 'insts')
     insts = f'{insts}, {insts.lower()}'
     inst_set = set(insts.split(', '))
+    tel_set = ('k1', 'k2')
 
     parser = argparse.ArgumentParser(description="Run the Data Scrubber")
 
@@ -398,6 +399,8 @@ def parse_args(config):
     parser.add_argument("--logdir", type=str,
                         help="Define the directory for the log.")
     parser.add_argument("--inst", type=str, choices=inst_set, required=True,
+                        help="Name of instrument to run the scrubber for.")
+    parser.add_argument("--tel", type=str, choices=tel_set, required=True,
                         help="Name of instrument to run the scrubber for.")
     parser.add_argument("--force", type=int, default=0,
                         help="Don't exclude files with archive_dir set.")
@@ -675,7 +678,7 @@ def count_files(path_str):
     return len(glob(path_str))
 
 
-def count_koa_files(args):
+def count_koa_files(args, koa_dir):
     '/koadata/NIRES/20210223/lev0/'
     '/koadata/NIRES/stage/20210223/s/sdata1500/nires9/2021feb23/s210223_0002.fits'
     utd2 = int(args.utd2.replace('-', ''))
@@ -687,11 +690,11 @@ def count_koa_files(args):
         utd = utd2 - i
 
         sfile_list = [rslt for rslt in
-                      glob(f'/koadata/{args.inst}/stage/{utd}/**', recursive=True)
+                      glob(f'{koa_dir}/{args.inst}/stage/{utd}/**', recursive=True)
                       if not os.path.isdir(rslt)]
 
         ofile_list = [rslt for rslt in
-                       glob(f'/koadata/{args.inst}/{utd}/**', recursive=True)
+                       glob(f'{koa_dir}/{args.inst}/{utd}/**', recursive=True)
                        if not os.path.isdir(rslt)]
 
         sfiles += len(sfile_list)
@@ -744,7 +747,9 @@ def execute_remote_cmd(host, cmd, user, password, timeout=30, bg_run=False):
     fname = tempfile.mktemp()
     fout = open(fname, 'w')
 
-    options = '-q -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -oPubkeyAuthentication=no'
+    # TODO verify works
+    # options = '-q -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -oPubkeyAuthentication=no'
+    options = ''
     if bg_run:
         options += ' -f'
 
@@ -754,7 +759,9 @@ def execute_remote_cmd(host, cmd, user, password, timeout=30, bg_run=False):
     else:
         cipher = '3des-cbc'
 
-    ssh_cmd = 'ssh -c %s %s@%s %s "%s"' % (cipher, user, host, options, cmd)
+
+    # ssh_cmd = 'ssh -c %s %s@%s %s "%s"' % (cipher, user, host, options, cmd)
+    ssh_cmd = f'ssh {user}@{host} "{cmd}"'
 
     child = pexpect.spawnu(ssh_cmd, timeout=timeout)  # spawnu for Python 3
     child.expect(['[pP]assword: '])

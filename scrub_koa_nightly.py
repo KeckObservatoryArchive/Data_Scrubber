@@ -207,7 +207,7 @@ if __name__ == '__main__':
     else:
         config_type = "DEFAULT"
 
-    site = utils.get_config_param(config, config_type, 'site')
+    site = utils.get_config_param(config, config_type, f'site_{args.tel}')
     user = utils.get_config_param(config, config_type, 'user')
     store_server = utils.get_config_param(config, config_type, 'store_server')
     storage_root = utils.get_config_param(config, config_type, 'storage_root')
