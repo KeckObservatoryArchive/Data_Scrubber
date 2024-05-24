@@ -529,7 +529,6 @@ if __name__ == '__main__':
         sdata_move = 0
 
     site = utils.get_config_param(config, config_type, f'site_{args.tel}')
-    print('site', site)
     user = utils.get_config_param(config, config_type, 'user')
     store_server = utils.get_config_param(config, config_type, 'store_server')
 

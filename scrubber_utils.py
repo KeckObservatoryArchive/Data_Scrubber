@@ -408,8 +408,6 @@ def parse_args(config):
     # add inst specific start/end ndays from the config if exist
     # args = parser.parse_args()
     args, unknown_args = parser.parse_known_args()
-    print(args)
-    print(args.inst.lower())
 
     try:
         start = int(get_config_param(config, 'TIMEFRAME', f'{args.inst.lower()}_start'))
@@ -747,20 +745,6 @@ def execute_remote_cmd(host, cmd, user, password, timeout=30, bg_run=False):
     fname = tempfile.mktemp()
     fout = open(fname, 'w')
 
-    # TODO verify works
-    # options = '-q -oStrictHostKeyChecking=no -oUserKnownHostsFile=/dev/null -oPubkeyAuthentication=no'
-    options = ''
-    if bg_run:
-        options += ' -f'
-
-    # ssh_cmd = 'ssh -c 3des-cbc %s@%s %s "%s"' % (user, host, options, cmd)
-    if host == 'kpfserver':
-        cipher = 'aes128-ctr'
-    else:
-        cipher = '3des-cbc'
-
-
-    # ssh_cmd = 'ssh -c %s %s@%s %s "%s"' % (cipher, user, host, options, cmd)
     ssh_cmd = f'ssh {user}@{host} "{cmd}"'
 
     child = pexpect.spawnu(ssh_cmd, timeout=timeout)  # spawnu for Python 3
