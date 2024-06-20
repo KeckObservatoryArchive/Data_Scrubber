@@ -170,11 +170,3 @@ Report / Email generated:
     
     0 :Number of files removed from KOA.
     0 :Number of files moved to storage.
-
-
-Cron runs on data server:
-
-27 14 * * * /usr/local/anaconda3-5.0.0.1/bin/python /usr/local/kroot/archive/scrubber/scrub_koa_nightly.py --dev > /dev/null 2>&1
-   
-   
-   

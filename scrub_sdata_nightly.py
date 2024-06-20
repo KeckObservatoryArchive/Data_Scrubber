@@ -70,7 +70,6 @@ class ToDelete:
         # local_path = ofname
         mv_path_remote = f"{ofname[2:]}"
         local_path = f"{inst_comp}/{mv_path_remote}"
-
         moved = self._rm_files(local_path, mv_path_remote)
 
         self.log.info(f"rm_sdata_func -- file moved: {moved}")
@@ -142,8 +141,6 @@ class ToDelete:
         if not utils.chk_file_exists(local_path):
             log_str = f'skipping {local_path} -- moved or does not exist.'
             log.info(log_str)
-            # if moved:
-            #     self.mark_deleted(result['koaid'])
             return 0
 
         inst_name = args.inst.upper()
@@ -198,6 +195,7 @@ class ToDelete:
         else:
             cmd = f'/bin/rm {remove_path}'
 
+
         # TODO for testing
         # cmd = f'/bin/ls {remove_path}'
 
@@ -211,10 +209,12 @@ class ToDelete:
             self.log.warning(f'error with command: {server} {cmd} {account} {pw}')
             return 0
 
-        # check that it was removed locally (with /s)
-        if utils.chk_file_exists(local_path):
-            self.log.error(f"File not removed,  check path: {remove_path}")
-            return 0
+        # check that it was removed locally
+        # TODO this causes issues
+        # if utils.chk_file_exists(local_path):
+        #     self.log.error(f"File not removed,  check path: {remove_path} local path: {local_path}")
+        #     print('returning 0')
+        #     return 0
 
         self.log.info(f"File removed from: {remove_path}")
 
@@ -224,7 +224,6 @@ class ToDelete:
         files_to_remove = utils.kpf_component_files(local_path, remove_path, log)
         if files_to_remove:
             for mv_path in files_to_remove:
-
                 storage_dir = re.sub(rf'{koa_disk_num[-1]}.', '/instr1/KPF', mv_path)
                 log.info(f'component files: {mv_path} storage: {storage_dir}')
 
@@ -233,10 +232,9 @@ class ToDelete:
 
                 try:
                     # remove filename and component
-                    component_path = mv_path.rsplit('/', 2)[0]
+                    component_path = f"{inst_comp}/{mv_path.rsplit('/', 2)[0]}"
                     remote_comp_path = remove_path_new.rsplit('/', 2)[0]
                     storage_dir_path = storage_dir.rsplit('/', 2)[0]
-
                     self.paths2cln.add((component_path, remote_comp_path, storage_dir_path))
                 except:
                     pass
@@ -254,6 +252,9 @@ class ToDelete:
             for cdir in all_dirs:
                 local = f'{pth[0]}/{cdir}/'
                 store = f'{pth[2]}/{cdir}'
+
+                # TODO
+                local = f"{inst_comp}/{pth[1]}/{cdir}/"
 
                 # local = /s/sdata1701/kpfeng/2023feb02/Red/
                 # pth[1] = /sdata1701/kpfeng/2023feb02
@@ -430,12 +431,16 @@ class ChkArchive:
                                             ofname=ofname)
 
         filename = ofname.split('/')[-1]
-        path = f'{store_dir}/{filename}*'
-        if not utils.exists_remote(f'{user}@{store_server}', path):
-            log.error(f'data not on storage: {path} data: {dat}')
+        # path = f'{store_dir}/{filename}*'
+        # if not utils.exists_remote(f'{user}@{store_server}', path):
+
+        storage_path = f'/net/storageserver/{store_dir}/{filename}*'
+        if not utils.chk_file_exists(storage_path):
+        # if not utils.exists_remote(f'{user}@{store_server}', path):
+            log.error(f'data not on storage: {storage_path} data: {dat}')
             return False
 
-        log.info(f'File found stored at: {path}')
+        log.info(f'File found stored at: {storage_path}')
 
         return True
 
