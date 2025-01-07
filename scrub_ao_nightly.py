@@ -80,6 +80,8 @@ class ScrubAO:
             log.info(f"Path: {paths['summit']} has already been cleaned.")
             return 1
 
+        # TODO add the create year directory -- issue is needs to be aobld
+
         hq_month_path = paths['hq_month']
         if not path.exists(hq_month_path):
             try:
@@ -88,10 +90,11 @@ class ScrubAO:
             except OSError:
                 # check to see if the year needs to be made
                 try:
-                    mkdir(path.dirname(hq_month_path.strip('/')))
+                    hq_year_path = paths['hq_year']
+                    mkdir(path.dirname(hq_year_path))
                 except:
                     log.info(f"Error creating the directory for the year "
-                             f"{path.dirname(hq_month_path.strip('/'))}")
+                             f"{hq_year_path}")
             except:
                 log.info(f"Error creating the directory for the month "
                          f"{hq_month_path}")
@@ -117,8 +120,6 @@ class ScrubAO:
         """
         # TODO need to rsync in the sub directories
         # TODO should work,  untested
-        # print('summit', paths['summit'])
-        #
         dirs = sorted([x[0] for x in walk(paths['summit'])],
                       key=len, reverse=True)
         ret_val = 0
@@ -171,10 +172,12 @@ class ScrubAO:
         """
         utd_str = datetime.strftime(utd_datetime, '%y/%m/%d')
         utd_month = datetime.strftime(utd_datetime, '%y/%m')
+        utd_year = datetime.strftime(utd_datetime, '%y')
 
         paths = {'summit': f'/net/k{self.tel}aoserver/k{self.tel}aodata/nightly/{utd_str}/',
                  'hq': f'/h/nightly{self.tel}/ao/{utd_str}/',
-                 'hq_month': f'/h/nightly{self.tel}/ao/{utd_month}/'}
+                 'hq_month': f'/h/nightly{self.tel}/ao/{utd_month}/',
+                 'hq_year': f'/h/nightly{self.tel}/ao/{utd_year}/'}
 
         return paths
 
