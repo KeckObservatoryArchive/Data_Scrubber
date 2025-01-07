@@ -80,8 +80,6 @@ class ScrubAO:
             log.info(f"Path: {paths['summit']} has already been cleaned.")
             return 1
 
-        # TODO add the create year directory -- issue is needs to be aobld
-
         hq_month_path = paths['hq_month']
         if not path.exists(hq_month_path):
             try:
