@@ -217,6 +217,7 @@ def create_sdata_report(args, metrics, inst):
     report += f"\n{metrics['nresults']['sdata'][1]} : verified sdata results to delete (lev0)."
 
     for val in {'sdata'}:
+    for val in {'sdata'}:
         diff = metrics['nresults'][val][0] - metrics['nresults'][val][1]
         if diff > 0:
             report += f"\n\nErrors: "

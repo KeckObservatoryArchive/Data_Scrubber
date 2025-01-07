@@ -312,7 +312,7 @@ class ToDelete:
         log.info(f'koaid: {koaid}')
 
         if koaid:
-            if 'lev0' in server_str:
+            if 'lev0' in server_str and 'KPF' not in server_str and 'HIRES' not in server_str:
                 koaid += "."
 
             rsync_cmd = ["rsync", self.rm, "-avz", "-e", "ssh",
