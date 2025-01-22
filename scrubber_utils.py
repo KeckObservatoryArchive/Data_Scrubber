@@ -217,7 +217,6 @@ def create_sdata_report(args, metrics, inst):
     report += f"\n{metrics['nresults']['sdata'][1]} : verified sdata results to delete (lev0)."
 
     for val in {'sdata'}:
-    for val in {'sdata'}:
         diff = metrics['nresults'][val][0] - metrics['nresults'][val][1]
         if diff > 0:
             report += f"\n\nErrors: "
@@ -335,7 +334,7 @@ def write_emails(config, report, log, log_stream=None, errors=None, prefix=''):
                    f'{prefix} Scrubber Warnings: {now}', log)
 
 
-def create_logger(name, logdir):
+def create_logger(name, logdir, inst=None):
     """
     Set the logger for writing to a log file,  and capturing the
     warnings/errors to be sent in an email.
@@ -344,9 +343,12 @@ def create_logger(name, logdir):
     :return: <str> log_name (including date+time)
              <_io.StringIO> the log stream handler
     """
-    # now = datetime.now().strftime('%Y%m%d_%H:%M:%S')
+    # now = datetime.now().strftime('%Y%m%d')
     now = datetime.now().strftime('%Y%m')
-    log_name = f'{name}_{now}'
+    if inst:
+        log_name = f'{name}_{inst}_{now}'
+    else:
+        log_name = f'{name}_{now}'
     log_fullpath = f'{logdir}/{log_name}.log'
     try:
         #Create logger object
@@ -417,7 +419,6 @@ def parse_args(config):
         start = int(get_config_param(config, 'TIMEFRAME', 'start'))
         end = int(get_config_param(config, 'TIMEFRAME', 'end'))
 
-    print(f"default timeframe: -{start} to -{end}")
     parser.add_argument("--utd", type=str,
                         default=(now - timedelta(days=start)).strftime('%Y-%m-%d'),
                         help="Start date to process YYYY-MM-DD.")
@@ -827,3 +828,20 @@ def get_kpf_compdir(hdr, hdr_key, comp_name, log):
         log.error(f"could not determine directory: {comp_name}, filename: {filename}")
 
     return None
+
+def parse_range_uids(uids_str):
+    uids = []
+    for part in uids_str.split(","):
+        part = part.strip()
+
+        # handle the range
+        if "-" in part:
+            start, end = map(int, part.split("-"))
+            uids.extend(range(start, end + 1))
+        elif part.isdigit():
+            uids.append(int(part))
+        else:
+            uids.append(part)
+
+    return uids
+

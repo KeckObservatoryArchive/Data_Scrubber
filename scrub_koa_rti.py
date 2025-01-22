@@ -528,7 +528,7 @@ class ChkArchive:
 if __name__ == '__main__':
     """
     to run:
-        python scrub_koa_rti.py --utd 2021-02-11 --utd2 2021-02-12
+        python scrub_koa_rti.py --inst NIRC2 --tel k2 --utd 2021-02-11 --utd2 2021-02-12
     """
     config = configparser.ConfigParser()
     config.read(CONFIG_FILE)
@@ -556,8 +556,10 @@ if __name__ == '__main__':
     else:
         log_dir = args.logdir
 
-    log_name, log_stream = utils.create_logger('rti_scrubber', log_dir)
+    log_name, log_stream = utils.create_logger('rti_scrubber', log_dir, args.inst)
     log = logging.getLogger(log_name)
+
+    log.info(f"Staring Scrub data in UT range: {args.utd} to {args.utd2}\n")
 
     # this should be /koadata,  files_root becomes /k1koadata
     basic_root = utils.get_config_param(config, 'koa_disk', 'path_root')
@@ -569,7 +571,6 @@ if __name__ == '__main__':
     store_before = utils.count_store(user, store_server, f'{storage_direct}',
                                      f'{args.inst}/*', log)
 
-    log.info(f"Scrubbing data in UT range: {args.utd} to {args.utd2}\n")
     log.info(f"MOVE KOA PROCESSED FILES to storage: {move}")
 
     delete_obj = ToDelete(args.inst)

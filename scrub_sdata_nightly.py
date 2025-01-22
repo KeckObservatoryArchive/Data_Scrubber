@@ -1,6 +1,8 @@
 import os
 import re
 import sys
+import pwd
+import grp
 import configparser
 import logging
 import json
@@ -72,10 +74,11 @@ class ToDelete:
         local_path = f"{inst_comp}/{mv_path_remote}"
         moved = self._rm_files(local_path, mv_path_remote)
 
-        self.log.info(f"rm_sdata_func -- file moved: {moved}")
-
         if moved:
             self.mark_deleted(result['koaid'])
+            self.log.info(f"file removed: {moved}")
+        else:
+            self.log.warning(f"file not removed: {moved}")
 
         return moved
 
@@ -113,6 +116,27 @@ class ToDelete:
 
         return True
 
+    def chk_local_nfs_exists(self, local_path):
+        # check that the file exists
+        if not utils.chk_file_exists(local_path):
+            # check /s/sdata if the file location is /net
+            if 'net' in local_path:
+                try:
+                    sdata_path = local_path.split('sdata')[1]
+                except Exception as err:
+                    self.log.warning(f"Error changing path to sdata: {err}")
+                    return None
+
+                local_path = f"/s/sdata{sdata_path}"
+                if utils.chk_file_exists(local_path):
+                    return local_path
+
+            log_str = f'skipping {local_path} -- moved or does not exist.'
+            log.info(log_str)
+            return None
+
+        return local_path
+
     def _rm_files(self, local_path, remove_path, directory=False,
                   only_dir=False, recursive=True):
         """
@@ -138,85 +162,24 @@ class ToDelete:
             self._rm_files(exc_path_local, exc_path_remote, directory=True)
 
         # check that the file exists
-        if not utils.chk_file_exists(local_path):
-            log_str = f'skipping {local_path} -- moved or does not exist.'
-            log.info(log_str)
-            return 0
-
-        inst_name = args.inst.upper()
-        inst = utils.get_config_param(config, 'accounts', inst_name).lower()
-        account = None
-        for direct in remove_path.split('/'):
-            if inst in direct and 'fits' not in direct:
-                account = direct
-
-        if not account:
-            for direct in remove_path.split('/'):
-                if 'eng' in direct and 'fits' not in direct:
-                    account = direct
-
-        if inst_name == 'KPF':
-            account = 'kpfeng'
-
-        if not account:
-            log.error(f'could not determine the account from: {remove_path}')
-            return 0
-
-        acnt_numb = account.strip(inst).zfill(2)
-        try:
-            int(acnt_numb)
-            pw = f"{numbered_prefix}{acnt_numb}{numbered_suffix}"
-        except ValueError:
-            if 'eng' in account.split(inst):
-                pw = eng_pw
-            elif 'eng' in account:
-                pw = eng_pw
-            elif inst_name == 'KPF':
-                pw = eng_pw
-            else:
-                log.warning(f'could not determine the password from path: {remove_path}')
-                return 0
-
-        if not pw:
-            return 0
-
-        if inst_name == 'KPF':
-            pw = eng_pw
+        local_path = self.chk_local_nfs_exists(local_path)
+        if not local_path:
+            # return 1 to mark the file as deleted in the database
+            # and maintain the correct count of files
+            return 1
 
         # temporary for KPF
         if inst_name == 'KPF' and recursive:
             if not self.kpf_components(local_path, remove_path):
                 return False
 
-        if only_dir:
-            cmd = f'/bin/rmdir {remove_path}'
-        elif directory:
-            cmd = f'/bin/rm -r {remove_path}'
-        else:
-            cmd = f'/bin/rm {remove_path}'
-
-
-        # TODO for testing
-        # cmd = f'/bin/ls {remove_path}'
-
-        log.info(f'remote command: {server} {cmd} {account} {pw} {remove_path}')
-
-        # TODO this was diabled for testing
-        try:
-            utils.execute_remote_cmd(server, cmd, account, pw)
-        except Exception as err:
-            self.log.warning(f'exception in executing remote command: {err}')
-            self.log.warning(f'error with command: {server} {cmd} {account} {pw}')
+        # TODO new remove over NFS mount instead of SSH
+        log.info(f'removing {local_path}')
+        if not self.remove_over_mount(local_path):
+            self.log.warning(f"File not removed from: {local_path}")
             return 0
 
-        # check that it was removed locally
-        # TODO this causes issues
-        # if utils.chk_file_exists(local_path):
-        #     self.log.error(f"File not removed,  check path: {remove_path} local path: {local_path}")
-        #     print('returning 0')
-        #     return 0
-
-        self.log.info(f"File removed from: {remove_path}")
+        self.log.info(f"File removed from: {local_path}")
 
         return 1
 
@@ -240,6 +203,77 @@ class ToDelete:
                     pass
 
         return True
+
+    def remove_over_mount(self, local_path):
+        """
+        Remove the file over the mount point
+
+        :param local_path: <str> the /s/sdata... fullpath including filename
+        """
+        if not local_path:
+            return
+
+        # remove the file over NFS
+        try:
+            uid, gid = self.get_file_user_group(local_path)
+            if not self.chk_uid_approved(uid):
+                log.warning(f"UID {uid} is not approved to remove files.")
+                return False
+            command = ["rm", local_path]
+            self.run_cmd_as_user(uid, gid, command)
+        except Exception as err:
+            log.warning(f"Error removing file: {local_path}, error: {err}")
+            return False
+
+        return True
+
+    def chk_uid_approved(self, uid):
+        """
+        Check if the uid is in the list of approved user ids.
+        """
+        if uid in approved_uids:
+            return True
+
+        self.log.error(f"UID {uid} is not approved for inst {inst_name}.")
+
+        return False
+
+    def get_file_user_group(self, file_path):
+        """
+        Get the user and group of a file.  If the name is available the
+        name of the group and user are returned.  If not, the uid and gid
+        are returned.  The name resolution is used to match the against the
+        allowed user groups.
+        """
+
+        file_stat = os.stat(file_path)
+
+        # Get the user ID and group ID
+        uid = file_stat.st_uid
+        gid = file_stat.st_gid
+
+        # Get the username and group name
+        try:
+            user = pwd.getpwuid(uid).pw_name
+            group = grp.getgrgid(gid).gr_name
+        except Exception as err:
+            self.log.info(f'could not resolve user/group name of uid/gid {uid}/{gid}, {err}')
+            return uid, gid
+
+        return user, group
+
+    def run_cmd_as_user(self, uid, gid, command):
+        try:
+            # switch users and remove the file
+            setpriv_command = ["sudo", "setpriv", f"--reuid={uid}", f"--regid={gid}", "--clear-groups", ] + command
+            result = subprocess.run(setpriv_command, text=True, capture_output=True)
+            if result.returncode == 0:
+                self.log.info(f"Success: {setpriv_command}, stdout: {result.stdout}")
+            else:
+                self.log.warning(f"Error: {setpriv_command}, stderr: {result.stderr}")
+        except Exception as e:
+            print(f"An error occurred: {e}")
+
 
     def clean_up_kpf(self):
 
@@ -527,9 +561,11 @@ if __name__ == '__main__':
     else:
         config_type = 'DEFAULT'
 
+    inst_name = args.inst.upper()
+
     try:
         sdata_move = int(utils.get_config_param(config, 'SDATA_REMOVE',
-                                                args.inst))
+                                                inst_name))
     except KeyError:
         sdata_move = 0
 
@@ -541,37 +577,26 @@ if __name__ == '__main__':
     archived_key = utils.get_config_param(config, 'archive', 'archived')
     status_col = utils.get_config_param(config, 'db_columns', 'status')
 
-    numbered_prefix = utils.get_config_param(config, 'passwords', 'numbered_prefix')
-    numbered_suffix = utils.get_config_param(config, 'passwords', 'numbered_suffix')
+    approved_uids_str = utils.get_config_param(config, 'approved_uids', inst_name)
+    approved_uids = utils.parse_range_uids(approved_uids_str)
 
     try:
-        path_exclude = utils.get_config_param(config, 'path_exclude', args.inst)
+        path_exclude = utils.get_config_param(config, 'path_exclude', inst_name)
     except:
         path_exclude = None
 
-    eng_pw = utils.get_config_param(config, 'passwords', 'eng_account')
-
-    # update the PW for new AD PW for NIRC2
-    if args.inst.lower() == 'nirc2':
-        pw_suffix = utils.get_config_param(config, 'passwords', f'{args.inst}_suffix')
-        eng_pw += pw_suffix
-        numbered_suffix += pw_suffix
-
     inst_root = utils.get_config_param(config, 'inst_disk', 'path_root')
     try:
-        inst_comp = f"{inst_root}/{utils.get_config_param(config, 'inst_disk', args.inst)}"
+        inst_comp = f"{inst_root}/{utils.get_config_param(config, 'inst_disk', inst_name)}"
     except:
         inst_comp = None
-
-    server_user = utils.get_config_param(config, 'accounts', args.inst)
-    server = utils.get_config_param(config, 'servers', args.inst)
 
     if not args.logdir:
         log_dir = utils.get_config_param(config, config_type, 'log_dir')
     else:
         log_dir = args.logdir
 
-    log_name, log_stream = utils.create_logger('sdata_scrubber', log_dir)
+    log_name, log_stream = utils.create_logger('sdata_scrubber', log_dir, inst_name)
     log = logging.getLogger(log_name)
     print(f'writing log to: {log_dir}/{log_name}')
 
@@ -579,7 +604,7 @@ if __name__ == '__main__':
     log.info(f"Scrubbing sdata in UT range: {args.utd} to {args.utd2}\n")
     log.info(f"Avoiding paths with: {path_exclude}")
 
-    delete_obj = ToDelete(args.inst)
+    delete_obj = ToDelete(inst_name)
     metrics = delete_obj.get_metrics()
     sdata_files = delete_obj.db_obj.get_files_to_move()
 
@@ -596,7 +621,7 @@ if __name__ == '__main__':
     else:
         nfiles_before = 0
 
-    koa_disk_num = utils.get_config_param(config, 'koa_disk', args.inst)
+    koa_disk_num = utils.get_config_param(config, 'koa_disk', inst_name)
     if sdata_move:
         metrics['sdata'] = delete_obj.rm_sdata_files(sdata_files)
 
@@ -612,11 +637,11 @@ if __name__ == '__main__':
     metrics['total_sdata_mv'] = nfiles_before - nfiles_after
     metrics['total_files'] = delete_obj.db_obj.num_all_files(args.utd, args.utd2)
 
-    report = utils.create_sdata_report(args, metrics, args.inst)
+    report = utils.create_sdata_report(args, metrics, inst_name)
     log.info(report)
 
     utils.write_emails(config, report, log, errors=delete_obj.db_obj.get_errors(),
-                       prefix=f'{args.inst} SDATA')
+                       prefix=f'{inst_name} SDATA')
 
 
 
