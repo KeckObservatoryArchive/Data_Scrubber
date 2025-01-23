@@ -626,8 +626,10 @@ def count_store(user, store_server, store_path, inst, log):
     :return: the file count for the directory
     """
     n_store = 0
-    cmd = ['ssh', f'{user}@{store_server}', 'find',
-           f'{store_path}/{inst}/', '-type', 'f', '|', 'wc', '-l']
+    # cmd = ['ssh', f'{user}@{store_server}', 'find',
+    #        f'{store_path}/{inst}/', '-type', 'f', '|', 'wc', '-l']
+    cmd = ['find', f'/net/storageserver/{store_path}/{inst}/',
+           '-type', 'f', '|', 'wc', '-l']
 
     try:
         n_store = int(subprocess.check_output(cmd).decode('utf-8'))
