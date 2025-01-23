@@ -166,7 +166,9 @@ class ToDelete:
         if not local_path:
             # return 1 to mark the file as deleted in the database
             # and maintain the correct count of files
-            return 1
+            # TODO only return 1 if the root of local_path exists,  avoid when
+            # the mount is missing
+            return 0
 
         # temporary for KPF
         if inst_name == 'KPF' and recursive:
