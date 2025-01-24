@@ -467,12 +467,8 @@ class ChkArchive:
                                             ofname=ofname)
 
         filename = ofname.split('/')[-1]
-        # path = f'{store_dir}/{filename}*'
-        # if not utils.exists_remote(f'{user}@{store_server}', path):
-
         storage_path = f'/net/storageserver/{store_dir}/{filename}*'
         if not utils.chk_file_exists(storage_path):
-        # if not utils.exists_remote(f'{user}@{store_server}', path):
             log.error(f'data not on storage: {storage_path} data: {dat}')
             return False
 
@@ -572,7 +568,6 @@ if __name__ == '__main__':
         sdata_move = 0
 
     site = utils.get_config_param(config, config_type, f'site_{args.tel}')
-    user = utils.get_config_param(config, config_type, 'user')
     store_server = utils.get_config_param(config, config_type, 'store_server')
 
     deleted_col = utils.get_config_param(config, 'db_columns', 'deleted')
