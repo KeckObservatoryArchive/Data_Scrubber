@@ -138,23 +138,6 @@ def query_rti_api(url, qtype, type_val, val=None, columns=None, key=None, inst=N
     return results
 
 
-def exists_remote(host, path):
-    cmd = ['ssh', host, 'ls', path]
-    try:
-        status = subprocess.call(cmd)
-    except Exception as err:
-        return False
-
-    if status == 0:
-        return True
-    if status == 1:
-        return False
-    if status == 2:
-        return False
-
-    raise Exception('SSH failed')
-
-
 def create_rti_report(args, metrics, move, inst):
     """
     Form the report to be emailed at the end of a scrub run.
@@ -654,22 +637,6 @@ def diff_list(list1, list2):
     return [i for i in list1 + list2 if i not in list1 or i not in list2]
 
 
-def dir_exists(user, store_server, store_path, utd):
-    """
-    Check if directory exists on remote server.
-
-    :param user:
-    :param store_server:
-    :param store_path: <str> the path to store the files.
-    :param utd: <str> date YYMMDD
-    :return: <bool> 1 if file exists
-    """
-    cmd = ['ssh', f'{user}@{store_server}', 'test', '-d',
-           f'{store_path}/{utd}/', '&&', 'echo', '1', '||', 'echo', '0']
-
-    return int(subprocess.check_output(cmd).decode('utf-8'))
-
-
 def count_files(path_str):
     """
     Count the files in directory with a wildcard.
@@ -739,34 +706,6 @@ def determine_storage(koaid, config, config_type, level=0, ofname=None):
         storage_path += f"{koa_root}{koa_num}/{utd}/lev{level}/"
 
     return storage_path
-
-
-def execute_remote_cmd(host, cmd, user, password, timeout=30, bg_run=False):
-    """SSH'es to a host using the supplied credentials and executes a command.
-    Throws an exception if the command doesn't return 0.
-    bgrun: run command in the background"""
-
-    fname = tempfile.mktemp()
-    fout = open(fname, 'w')
-
-    ssh_cmd = f'ssh {user}@{host} "{cmd}"'
-
-    child = pexpect.spawnu(ssh_cmd, timeout=timeout)  # spawnu for Python 3
-    child.expect(['[pP]assword: '])
-    child.sendline(password)
-    child.logfile = fout
-    child.expect(pexpect.EOF)
-    child.close()
-    fout.close()
-
-    fin = open(fname, 'r')
-    stdout = fin.read()
-    fin.close()
-
-    if 0 != child.exitstatus:
-        raise Exception(stdout)
-
-    return stdout
 
 
 def kpf_component_files(mv_path_local, mv_path_remote, log):
