@@ -1,13 +1,9 @@
 import os
-import sys
 import configparser
 import logging
 import json
 import subprocess
 import scrubber_utils as utils
-
-#temporary for KPF
-# from datetime import datetime
 
 APP_PATH = os.path.abspath(os.path.dirname(__file__))
 CONFIG_FILE = f'{APP_PATH}/scrubber_config.live.ini'
@@ -84,40 +80,35 @@ class ToDelete:
         if return_val != 1:
             return return_val
 
-        # # if successfully moved,  add archive dir to DB entry
-        # if not self.add_archived_dir(koaid, storage_dir, level=0):
-        #     self.log.warning(f"archive_dir not set for {koaid}")
-
         return return_val
 
-    # def store_kpf_components(self):
-    #     # copy all Files,  in case some are not in the headers
-    #     all_dirs = ['CaHK', 'CRED2', 'ExpMeter', 'FVC1', 'FVC2', 'FVC3',
-    #                 'Green', 'L0', 'Red', 'script_logs']
-    #     log.info(f'dir2store {self.dir2store}')
-    #     for dir_set in self.dir2store:
-    #         kpf_comp_root = dir_set[0]
-    #         storage_dir = dir_set[1]
-    #
-    #         # make directory if it doesn't exist
-    #         utils.make_remote_dir('koaadmin@storageserver', storage_dir, log)
-    #
-    #         # copy, don't remove the files
-    #         orig_rm = self.rm
-    #         self.rm = ''
-    #         for comp_dir in all_dirs:
-    #             storage_now = f'{storage_dir}/{comp_dir}/'
-    #             mv_path = f'{kpf_comp_root}{comp_dir}'
-    #             log.info(f'component directory: {comp_dir}, {mv_path}, {storage_now}')
-    #             if not utils.exists_remote('koaadmin@storageserver', storage_now):
-    #             # if not utils.storage_exists(storage_now):
-    #                 utils.make_remote_dir('koaadmin@storageserver', storage_now, log)
-    #             log.info(f'component directories, from: {mv_path} to: {storage_now}')
-    #             self._rsync_files(mv_path, storage_now, sync_all=True)
-    #
-    #         self.rm = orig_rm
-    #
-    #     return
+    def store_kpf_components(self):
+        # copy all Files,  in case some are not in the headers
+        all_dirs = ['CaHK', 'CRED2', 'ExpMeter', 'FVC1', 'FVC2', 'FVC3',
+                    'Green', 'L0', 'Red', 'script_logs']
+        log.info(f'dir2store {self.dir2store}')
+        for dir_set in self.dir2store:
+            kpf_comp_root = dir_set[0]
+            storage_dir = dir_set[1]
+
+            # make directory if it doesn't exist
+            utils.make_remote_dir('koaadmin@storageserver', storage_dir, log)
+
+            # copy, don't remove the files
+            orig_rm = self.rm
+            self.rm = ''
+            for comp_dir in all_dirs:
+                storage_now = f'{storage_dir}/{comp_dir}/'
+                mv_path = f'{kpf_comp_root}{comp_dir}'
+                log.info(f'component directory: {comp_dir}, {mv_path}, {storage_now}')
+                if not utils.exists_remote('koaadmin@storageserver', storage_now):
+                    utils.make_remote_dir('koaadmin@storageserver', storage_now, log)
+                log.info(f'component directories, from: {mv_path} to: {storage_now}')
+                self._rsync_files(mv_path, storage_now, sync_all=True)
+
+            self.rm = orig_rm
+
+        return
 
 
     def store_lev1_func(self, result):
@@ -327,8 +318,6 @@ class ToDelete:
             rsync_cmd = ["rsync", self.rm, "-vz", server_str, store_loc]
         else:
             rsync_cmd = ["rsync", self.rm, "-avz", server_str, store_loc]
-
-        log.info(f'rsync cmd: {rsync_cmd}')
 
         try:
             subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)

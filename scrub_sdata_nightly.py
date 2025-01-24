@@ -6,7 +6,6 @@ import grp
 import configparser
 import logging
 import json
-import subprocess
 import scrubber_utils as utils
 
 from datetime import datetime, timedelta
@@ -222,7 +221,10 @@ class ToDelete:
                 log.warning(f"UID {uid} is not approved to remove files.")
                 return False
             command = ["rm", local_path]
-            self.run_cmd_as_user(uid, gid, command)
+            success = utils.run_cmd_as_user(uid, gid, command, log)
+            if not success:
+                return False
+
         except Exception as err:
             log.warning(f"Error removing file: {local_path}, error: {err}")
             return False
@@ -263,18 +265,6 @@ class ToDelete:
             return uid, gid
 
         return user, group
-
-    def run_cmd_as_user(self, uid, gid, command):
-        try:
-            # switch users and remove the file
-            setpriv_command = ["sudo", "setpriv", f"--reuid={uid}", f"--regid={gid}", "--clear-groups", ] + command
-            result = subprocess.run(setpriv_command, text=True, capture_output=True)
-            if result.returncode == 0:
-                self.log.info(f"Success: {setpriv_command}, stdout: {result.stdout}")
-            else:
-                self.log.warning(f"Error: {setpriv_command}, stderr: {result.stderr}")
-        except Exception as e:
-            print(f"An error occurred: {e}")
 
 
     def clean_up_kpf(self):

@@ -608,6 +608,7 @@ def count_store(user, store_server, store_path, inst, log):
 
     :return: the file count for the directory
     """
+    log.info(f'counting files at {store_server}:{store_path}/{inst}')
     n_store = 0
     cmd = ['ssh', f'{user}@{store_server}', 'find',
            f'{store_path}/{inst}/', '-type', 'f', '|', 'wc', '-l']
@@ -787,3 +788,33 @@ def parse_range_uids(uids_str):
 
     return uids
 
+def run_cmd_as_user(uid, gid, command, log):
+    try:
+        # switch users and remove the file
+        as_usr_cmd = ["sudo", "setpriv", f"--reuid={uid}", f"--regid={gid}", "--clear-groups", ] + command
+        result = subprocess.run(as_usr_cmd, text=True, capture_output=True)
+        if result.returncode == 0:
+            log.info(f"Success: {as_usr_cmd}, stdout: {result.stdout}")
+        else:
+            log.warning(f"Error: {as_usr_cmd}, stderr: {result.stderr}")
+    except Exception as e:
+        log.error(f"Issue with cmd: {as_usr_cmd}, {e}")
+        return False
+
+    return True
+
+def exists_remote(host, path):
+    cmd = ['ssh', host, 'ls', path]
+    try:
+        status = subprocess.call(cmd)
+    except Exception as err:
+        return False
+
+    if status == 0:
+        return True
+    if status == 1:
+        return False
+    if status == 2:
+        return False
+
+    raise Exception('SSH failed')
