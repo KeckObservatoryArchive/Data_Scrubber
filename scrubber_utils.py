@@ -788,10 +788,10 @@ def parse_range_uids(uids_str):
 
     return uids
 
-def run_cmd_as_user(uid, gid, command, log):
+def run_cmd_as_user(uid, gid, cmd, log):
+    as_usr_cmd = ["sudo", "setpriv", f"--reuid={uid}", f"--regid={gid}", "--clear-groups", ] + cmd
     try:
         # switch users and remove the file
-        as_usr_cmd = ["sudo", "setpriv", f"--reuid={uid}", f"--regid={gid}", "--clear-groups", ] + command
         result = subprocess.run(as_usr_cmd, text=True, capture_output=True)
         if result.returncode == 0:
             log.info(f"Success: {as_usr_cmd}, stdout: {result.stdout}")
@@ -818,3 +818,4 @@ def exists_remote(host, path):
         return False
 
     raise Exception('SSH failed')
+

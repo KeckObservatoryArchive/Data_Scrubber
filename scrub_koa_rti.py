@@ -25,6 +25,9 @@ class ToDelete:
                         'inst': [0, 0], 'nresults': self.db_obj.get_nresults(),
                         'warnings': self.db_obj.get_warnings()}
 
+        self.koaadmin_uid = 175
+        self.koaadmin_gid = 20
+
         if config_type == "DEV":
             self.rm = ""
         else:
@@ -92,17 +95,24 @@ class ToDelete:
             storage_dir = dir_set[1]
 
             # make directory if it doesn't exist
-            utils.make_remote_dir('koaadmin@storageserver', storage_dir, log)
+            cmd = ['mkdir', '-p', f'/net/storageserver/{storage_dir}']
+            if not utils.run_cmd_as_user(self.koaadmin_uid, self.koaadmin_gid, cmd, log):
+                continue
 
             # copy, don't remove the files
             orig_rm = self.rm
             self.rm = ''
             for comp_dir in all_dirs:
                 storage_now = f'{storage_dir}/{comp_dir}/'
+                nfs_store_now = f'/net/storageserver/{storage_now}'
                 mv_path = f'{kpf_comp_root}{comp_dir}'
                 log.info(f'component directory: {comp_dir}, {mv_path}, {storage_now}')
-                if not utils.exists_remote('koaadmin@storageserver', storage_now):
-                    utils.make_remote_dir('koaadmin@storageserver', storage_now, log)
+                # if not utils.exists_remote('koaadmin@storageserver', storage_now):
+                # if not utils.exists_remote('koaadmin@storageserver', storage_now):
+                if not os.path.isdir(nfs_store_now):
+                    cmd = ['mkdir', '-p', nfs_store_now]
+                    if not utils.run_cmd_as_user(self.koaadmin_uid, self.koaadmin_gid, cmd, log):
+                        continue
                 log.info(f'component directories, from: {mv_path} to: {storage_now}')
                 self._rsync_files(mv_path, storage_now, sync_all=True)
 
@@ -226,8 +236,9 @@ class ToDelete:
             return None
 
         if storage_dir not in self.dirs_made:
-            utils.make_remote_dir(f'{user}@{store_server}', storage_dir, log)
-            self.dirs_made.append(storage_dir)
+            cmd = ['mkdir', '-p',  f'/net/storageserver/{storage_dir}']
+            if utils.run_cmd_as_user(self.koaadmin_uid, self.koaadmin_gid, cmd, log):
+                self.dirs_made.append(storage_dir)
 
         return storage_dir
 
@@ -556,10 +567,11 @@ if __name__ == '__main__':
     files_root = f"/{args.tel}{basic_root.strip('/')}"
 
     nfiles_before = utils.count_koa_files(args, files_root)
-
+    # nfiles_before =9999
     storage_direct = storage_root + storage_num
     store_before = utils.count_store(user, store_server, f'{storage_direct}',
                                      f'{args.inst}/*', log)
+    # store_before = 9999
 
     log.info(f"MOVE KOA PROCESSED FILES to storage: {move}")
 
