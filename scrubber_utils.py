@@ -533,20 +533,6 @@ def get_locations(inst, config, config_type):
     return koa_disk, storage_disk
 
 
-def make_remote_dir(host, dir_name, log):
-    """
-    Create a directory on a remote server.
-
-    :param host: <str> user@server_name
-    :param dir_name: <str> the directory to create
-    :param log: <class 'logging.Logger'> the log
-    :return:
-    """
-    cmd = ["ssh", host, "mkdir", "-p", dir_name]
-    log.info(f"created directory: {host}:{dir_name}")
-    subprocess.run(cmd, stdout=subprocess.DEVNULL, check=True)
-
-
 def make_storage_dir(storage_dir, storage_root, log):
     """
     Create the storage directory.  If it does not exists,  go up
@@ -802,20 +788,4 @@ def run_cmd_as_user(uid, gid, cmd, log):
         return False
 
     return True
-
-def exists_remote(host, path):
-    cmd = ['ssh', host, 'ls', path]
-    try:
-        status = subprocess.call(cmd)
-    except Exception as err:
-        return False
-
-    if status == 0:
-        return True
-    if status == 1:
-        return False
-    if status == 2:
-        return False
-
-    raise Exception('SSH failed')
 

@@ -107,8 +107,6 @@ class ToDelete:
                 nfs_store_now = f'/net/storageserver/{storage_now}'
                 mv_path = f'{kpf_comp_root}{comp_dir}'
                 log.info(f'component directory: {comp_dir}, {mv_path}, {storage_now}')
-                # if not utils.exists_remote('koaadmin@storageserver', storage_now):
-                # if not utils.exists_remote('koaadmin@storageserver', storage_now):
                 if not os.path.isdir(nfs_store_now):
                     cmd = ['mkdir', '-p', nfs_store_now]
                     if not utils.run_cmd_as_user(self.koaadmin_uid, self.koaadmin_gid, cmd, log):
