@@ -560,7 +560,7 @@ if __name__ == '__main__':
     log_name, log_stream = utils.create_logger('rti_scrubber', log_dir, args.inst)
     log = logging.getLogger(log_name)
 
-    log.info(f"Staring Scrub data in UT range: {args.utd} to {args.utd2}\n")
+    log.info(f"Starting Scrub data in UT range: {args.utd} to {args.utd2}\n")
 
     # this should be /koadata,  files_root becomes /k1koadata
     basic_root = utils.get_config_param(config, 'koa_disk', 'path_root')
