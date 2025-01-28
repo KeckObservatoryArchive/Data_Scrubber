@@ -316,20 +316,38 @@ class ToDelete:
             if 'lev0' in server_str and 'KPF' not in server_str and 'HIRES' not in server_str:
                 koaid += "."
 
-            rsync_cmd = ["rsync", self.rm, "-avz",
+            rsync_cmd = ["rsync", self.rm, "-avz", "-e", "ssh",
                          "--include", f"{koaid}*",
                          "--exclude", "*", f"{server_str}/", store_loc]
         elif sync_all:
-            rsync_cmd = ["/usr/bin/rsync", self.rm, "-avz",
+            rsync_cmd = ["/usr/bin/rsync", self.rm, "-avz", "-e", "ssh",
                          "--include", f"*fits*",
                          "--exclude", "*", f"{server_str}/", store_loc]
-        elif '.fits' in server_str:
-            rsync_cmd = ["rsync", self.rm, "-vz", server_str, store_loc]
-        else:
-            rsync_cmd = ["rsync", self.rm, "-avz", server_str, store_loc]
 
-        if not utils.run_cmd_as_user(self.koaadmin_uid, self.koaadmin_gid, rsync_cmd, log):
+        try:
+            subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
+        except subprocess.CalledProcessError:
+            log.warning(f"File(s) {mv_path} not moved to storage - {rsync_cmd}")
             return 0
+
+        # if koaid:
+        #     if 'lev0' in server_str and 'KPF' not in server_str and 'HIRES' not in server_str:
+        #         koaid += "."
+        #
+        #     rsync_cmd = ["rsync", self.rm, "-avz",
+        #                  "--include", f"{koaid}*",
+        #                  "--exclude", "*", f"{server_str}/", store_loc]
+        # elif sync_all:
+        #     rsync_cmd = ["/usr/bin/rsync", self.rm, "-avz",
+        #                  "--include", f"*fits*",
+        #                  "--exclude", "*", f"{server_str}/", store_loc]
+        # elif '.fits' in server_str:
+        #     rsync_cmd = ["rsync", self.rm, "-vz", server_str, store_loc]
+        # else:
+        #     rsync_cmd = ["rsync", self.rm, "-avz", server_str, store_loc]
+        #
+        # if not utils.run_cmd_as_user(self.koaadmin_uid, self.koaadmin_gid, rsync_cmd, log):
+        #     return 0
 
         return 1
 
