@@ -323,6 +323,10 @@ class ToDelete:
             rsync_cmd = ["/usr/bin/rsync", self.rm, "-avz", "-e", "ssh",
                          "--include", f"*fits*",
                          "--exclude", "*", f"{server_str}/", store_loc]
+        elif '.fits' in server_str:
+            rsync_cmd = ["rsync", self.rm, "-vz", server_str, store_loc]
+        else:
+            rsync_cmd = ["rsync", self.rm, "-avz", server_str, store_loc]
 
         try:
             subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
