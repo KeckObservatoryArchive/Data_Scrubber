@@ -307,7 +307,7 @@ class ToDelete:
             return -1
 
         server_str = f"{mv_path}"
-        store_loc = f'{user}@{store_server}:{storage_dir}'
+        store_loc = f'/net/storageserver/{storage_dir}'
 
         log.info(f'rsync files from: {server_str} to: {store_loc}')
         log.info(f'koaid: {koaid}')
@@ -316,11 +316,11 @@ class ToDelete:
             if 'lev0' in server_str and 'KPF' not in server_str and 'HIRES' not in server_str:
                 koaid += "."
 
-            rsync_cmd = ["rsync", self.rm, "-avz", "-e", "ssh",
+            rsync_cmd = ["rsync", self.rm, "-avz",
                          "--include", f"{koaid}*",
                          "--exclude", "*", f"{server_str}/", store_loc]
         elif sync_all:
-            rsync_cmd = ["/usr/bin/rsync", self.rm, "-avz", "ssh",
+            rsync_cmd = ["/usr/bin/rsync", self.rm, "-avz",
                          "--include", f"*fits*",
                          "--exclude", "*", f"{server_str}/", store_loc]
         elif '.fits' in server_str:
@@ -328,10 +328,7 @@ class ToDelete:
         else:
             rsync_cmd = ["rsync", self.rm, "-avz", server_str, store_loc]
 
-        try:
-            subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
-        except subprocess.CalledProcessError:
-            log.warning(f"File(s) {mv_path} not moved to storage - {rsync_cmd}")
+        if not utils.run_cmd_as_user(self.koaadmin_uid, self.koaadmin_gid, rsync_cmd, log):
             return 0
 
         return 1
