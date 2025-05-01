@@ -3,8 +3,8 @@ import configparser
 import logging
 import json
 import glob
-
 import subprocess
+
 import scrubber_utils as utils
 
 APP_PATH = os.path.abspath(os.path.dirname(__file__))
@@ -51,8 +51,12 @@ class ToDelete:
 
         nfiles_found = len(file_list)
 
+        files_funked = []
         n_files_touched = 0
         for result in file_list:
+            if 'process_dir' in result and result['process_dir'] in files_funked:
+                continue
+
             # rsync will return 1 per file,  when it succeeds, 0 fails,
             # -1 if file not found
             ret_val = func(result)
@@ -60,6 +64,9 @@ class ToDelete:
                 nfiles_found += ret_val
             else:
                 n_files_touched += ret_val
+
+            if 'process_dir' in result:
+                files_funked.append(result['process_dir'])
 
         return [nfiles_found, n_files_touched]
 
@@ -140,6 +147,9 @@ class ToDelete:
         if not storage_dir:
             return -1
 
+        if mv_path.endswith('lev1'):
+            mv_path = f'{mv_path}/'
+
         log.info(f'running store lev1,  storage dir {storage_dir}')
 
         if mv_path not in self.lev1_moved:
@@ -174,9 +184,13 @@ class ToDelete:
         if not storage_dir:
             return -1
 
-        log.info(f'running store lev2,  storage dir {storage_dir}')
+        if mv_path.endswith('lev2'):
+            mv_path = f'{mv_path}/'
+
+        log.info(f'running store lev2, mv path {mv_path}, storage dir {storage_dir}')
 
         if mv_path not in self.lev2_moved:
+            log.info(f'rsyncing {mv_path} to {storage_dir}')
             return_val = self._rsync_files(mv_path, storage_dir)
             self.lev2_moved.append(mv_path)
 
@@ -314,28 +328,6 @@ class ToDelete:
         log.info(f'rsync files from: {server_str} to: {store_loc}')
         log.info(f'koaid: {koaid}')
 
-        # if koaid:
-        #     if 'lev0' in server_str and 'KPF' not in server_str and 'HIRES' not in server_str:
-        #         koaid += "."
-        #
-        #     rsync_cmd = ["rsync", self.rm, "-avz", "-e", "ssh",
-        #                  "--include", f"{koaid}*",
-        #                  "--exclude", "*", f"{server_str}/", store_loc]
-        # elif sync_all:
-        #     rsync_cmd = ["/usr/bin/rsync", self.rm, "-avz", "-e", "ssh",
-        #                  "--include", f"*fits*",
-        #                  "--exclude", "*", f"{server_str}/", store_loc]
-        # elif '.fits' in server_str:
-        #     rsync_cmd = ["rsync", self.rm, "-vz", server_str, store_loc]
-        # else:
-        #     rsync_cmd = ["rsync", self.rm, "-avz", server_str, store_loc]
-        #
-        # try:
-        #     subprocess.run(rsync_cmd, stdout=subprocess.DEVNULL, check=True)
-        # except subprocess.CalledProcessError:
-        #     log.warning(f"File(s) {mv_path} not moved to storage - {rsync_cmd}")
-        #     return 0
-
         if koaid:
             if 'lev0' in server_str and 'KPF' not in server_str and 'HIRES' not in server_str:
                 koaid += "."
@@ -350,9 +342,10 @@ class ToDelete:
                          "--exclude", "*", f"{server_str}/", store_loc]
             files_wild = f'{server_str}/*fits'
         elif '.fits' in server_str:
-            rsync_cmd = ["rsync", "-vz", server_str, store_loc]
+            rsync_cmd = ["rsync", "-avz", server_str, store_loc]
             files_wild = f'{server_str}'
         else:
+            # sync a full directory of files
             rsync_cmd = ["rsync", "-avz", server_str, store_loc]
             files_wild = f'{server_str}'
 
@@ -361,13 +354,13 @@ class ToDelete:
             return 0
 
         if self.rm:
-            files_to_remove = glob.glob(files_wild)
-            for file_path in files_to_remove:
-                try:
-                    os.remove(file_path)
-                    log.info(f"Removed: {file_path}")
-                except Exception as e:
-                    log.error(f"Failed to remove {file_path}: {e}")
+            try:
+                cmd = f"rm -r {files_wild}"
+                subprocess.run(cmd, check=True, shell=True)
+                log.info(f"Removed: {files_wild}, cmd: {cmd}")
+            except subprocess.CalledProcessError as e:
+                log.error(f"Failed to remove {files_wild}: {e}")
+                return 0
 
         return 1
 

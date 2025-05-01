@@ -689,9 +689,12 @@ def determine_storage(koaid, config, config_type, level=0, ofname=None):
         s_root = '/'.join(dirs[:-1])
         storage_path += f"stage/{inst}/{utd}/{s_root}"
 
-    # storing lev0 and lev1 files
+    # storing lev0 and lev1 files,  rsync full directory lev1 lev2
+    elif level == 1 or level == 2:
+        storage_path += f"{koa_root}{koa_num}/{utd}/"
     else:
         storage_path += f"{koa_root}{koa_num}/{utd}/lev{level}/"
+
 
     return storage_path
 
