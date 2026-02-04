@@ -781,14 +781,15 @@ def run_cmd_as_user(uid, gid, cmd, log):
     as_usr_cmd = ["sudo", "setpriv", f"--reuid={uid}", f"--regid={gid}", "--clear-groups", ] + cmd
     if 'mosfire' in uid:
         as_usr_cmd = ["sudo", "setpriv", f"--reuid={uid}", f"--regid={gid}", "--groups=mosgrp", ] + cmd
-        
+
     try:
         # switch users and remove the file
         result = subprocess.run(as_usr_cmd, text=True, capture_output=True)
         if result.returncode == 0:
             log.info(f"Success: {as_usr_cmd}, stdout: {result.stdout}")
         else:
-            log.warning(f"Error: {as_usr_cmd}, stderr: {result.stderr}")
+            if 'executedMasks' not in cmd:
+                log.warning(f"Error: {as_usr_cmd}, stderr: {result.stderr}")
             return False
     except Exception as e:
         log.error(f"Issue with cmd: {as_usr_cmd}, {e}")

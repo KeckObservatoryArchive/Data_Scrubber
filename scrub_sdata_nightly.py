@@ -165,7 +165,7 @@ class ToDelete:
         if not local_path:
             # return 1 to mark the file as deleted in the database
             # and maintain the correct count of files
-            # TODO only return 1 if the root of local_path exists,  avoid when
+            # only return 1 if the root of local_path exists,  avoid when
             # the mount is missing
             return 0
 
@@ -174,7 +174,6 @@ class ToDelete:
             if not self.kpf_components(local_path, remove_path):
                 return False
 
-        # TODO new remove over NFS mount instead of SSH
         log.info(f'removing {local_path}')
         if not self.remove_over_mount(local_path):
             self.log.warning(f"File not removed from: {local_path}")
@@ -279,15 +278,10 @@ class ToDelete:
         # clean up remaining files
         for pth in self.paths2cln:
             for cdir in all_dirs:
-                local = f'{pth[0]}/{cdir}/'
                 store = f'{pth[2]}/{cdir}'
 
-                # TODO
                 local = f"{inst_comp}/{pth[1]}/{cdir}/"
 
-                # local = /s/sdata1701/kpfeng/2023feb02/Red/
-                # pth[1] = /sdata1701/kpfeng/2023feb02
-                # store = /instr1/KPF/kpfeng/2023feb02/Red
                 self.log.info(f'clean up paths: {local}, {pth[1]}, {store}')
                 file_list = glob(f'{local}/*', recursive=False)
                 for file in file_list:
@@ -614,9 +608,6 @@ if __name__ == '__main__':
     koa_disk_num = utils.get_config_param(config, 'koa_disk', inst_name)
     if sdata_move:
         metrics['sdata'] = delete_obj.rm_sdata_files(sdata_files)
-
-    # TODO TBD if this is required.
-    # utils.clean_empty_dirs(files_root, log)
 
     # count files after
     nfiles_after = utils.count_koa(mv_path, log)
