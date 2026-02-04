@@ -220,7 +220,10 @@ class ToDelete:
             if not self.chk_uid_approved(uid):
                 log.warning(f"UID {uid} is not approved to remove files.")
                 return False
-            command = ["rm", local_path]
+            if os.path.isdir(local_path):
+                command = ["rmdir", local_path]
+            else:
+                command = ["rm", local_path]
             success = utils.run_cmd_as_user(uid, gid, command, log)
             if not success:
                 return False

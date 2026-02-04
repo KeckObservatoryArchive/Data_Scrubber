@@ -687,7 +687,7 @@ def determine_storage(koaid, config, config_type, level=0, ofname=None):
         if 'fits' not in dirs[-1]:
             return None
         s_root = '/'.join(dirs[:-1])
-        storage_path += f"stage/{inst}/{utd}/{s_root}"
+        storage_path += f"stage/{utd}/{s_root}"
 
     # storing lev0 and lev1 files,  rsync full directory lev1 lev2
     elif level == 1 or level == 2:
@@ -779,6 +779,9 @@ def parse_range_uids(uids_str):
 
 def run_cmd_as_user(uid, gid, cmd, log):
     as_usr_cmd = ["sudo", "setpriv", f"--reuid={uid}", f"--regid={gid}", "--clear-groups", ] + cmd
+    if 'mosfire' in uid:
+        as_usr_cmd = ["sudo", "setpriv", f"--reuid={uid}", f"--regid={gid}", "--groups=mosgrp", ] + cmd
+        
     try:
         # switch users and remove the file
         result = subprocess.run(as_usr_cmd, text=True, capture_output=True)
@@ -786,6 +789,7 @@ def run_cmd_as_user(uid, gid, cmd, log):
             log.info(f"Success: {as_usr_cmd}, stdout: {result.stdout}")
         else:
             log.warning(f"Error: {as_usr_cmd}, stderr: {result.stderr}")
+            return False
     except Exception as e:
         log.error(f"Issue with cmd: {as_usr_cmd}, {e}")
         return False
