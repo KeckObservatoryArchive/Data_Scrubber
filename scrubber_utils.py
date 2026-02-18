@@ -779,7 +779,7 @@ def parse_range_uids(uids_str):
 
 def run_cmd_as_user(uid, gid, cmd, log):
     as_usr_cmd = ["sudo", "setpriv", f"--reuid={uid}", f"--regid={gid}", "--clear-groups", ] + cmd
-    if 'mosfire' in uid:
+    if 'mosfire' in str(uid):
         as_usr_cmd = ["sudo", "setpriv", f"--reuid={uid}", f"--regid={gid}", "--groups=mosgrp", ] + cmd
 
     try:
