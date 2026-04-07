@@ -518,8 +518,8 @@ class ChkArchive:
             val = result.get(col)
 
             if not val and col not in ['status_code', 'archive_dir',
-                                       'source_deleted']:
-                err = "INCOMPLETE RESULTS"
+                                       'source_deleted', 'stage_file']:
+                err = "INCOMPLETE RESULTS {}"
             elif col == 'status' and val != archived_key:
                 err = f"INVALID STATUS, STATUS must be = {archived_key}"
             elif col == 'process_dir' and 'lev' not in val.split('/')[-1]:
